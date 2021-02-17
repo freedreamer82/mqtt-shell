@@ -27,15 +27,6 @@ const (
 
 )
 
-type VersionFlag string
-
-func (v VersionFlag) Decode(ctx *kong.DecodeContext) error { return nil }
-func (v VersionFlag) IsBool() bool                         { return true }
-func (v VersionFlag) BeforeApply(app *kong.Kong, vars kong.Vars) error {
-	fmt.Println(vars["version"])
-	app.Exit(0)
-	return nil
-}
 
 type CLI struct {
 	ConfigFile     string      `short:"c" xor:"config" type:"existingfile"`
@@ -44,7 +35,7 @@ type CLI struct {
 	BrokerUser     string      `short:"u" help:"broker user" `
 	BrokerPassword string      `short:"P" help:"broker password" `
 	BrokerPort     int         `short:"p" help:"broker port"`
-	Version        VersionFlag `short:"v" xor:"flags"`
+	Version        kong.VersionFlag `short:"v" xor:"flags"`
 	Id             string      `short:"i" help:"node id"`
 	Mode           string      `short:"m" enum:"client,server," default:"" help:"client or server,default client"`
 }
