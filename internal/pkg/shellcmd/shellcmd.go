@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -20,7 +21,7 @@ func Shellout(command string, timeout time.Duration) (error, string) {
 
 		// Create the command with our context
 		cmd := exec.CommandContext(ctx, ShellToUse, "-c", command)
-
+		cmd.Env = append(os.Environ())
 		// This time we can simply use Output() to get the result.
 		out, err := cmd.CombinedOutput()
 

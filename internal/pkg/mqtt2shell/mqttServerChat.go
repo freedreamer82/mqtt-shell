@@ -32,6 +32,12 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 
 }
 
+func WithOptionBeaconTopic(topic string) MqttChatOption {
+	return func(h *MqttChat) {
+		h.beaconTopic = topic
+	}
+}
+
 func NewServerChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, opts ...MqttChatOption) *MqttServerChat {
 
 	sc := MqttServerChat{}

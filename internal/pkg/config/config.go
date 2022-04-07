@@ -27,17 +27,16 @@ const (
 
 )
 
-
 type CLI struct {
-	ConfigFile     string      `short:"c" xor:"config" type:"existingfile"`
-	Verbose        bool        `short:"d" help:"verbose log"`
-	Broker         string      `short:"b" xor:"flags" help:"Broker URL"`
-	BrokerUser     string      `short:"u" help:"broker user" `
-	BrokerPassword string      `short:"P" help:"broker password" `
-	BrokerPort     int         `short:"p" help:"broker port"`
+	ConfigFile     string           `short:"c" xor:"config" type:"existingfile"`
+	Verbose        bool             `short:"d" help:"verbose log"`
+	Broker         string           `short:"b" xor:"flags" help:"Broker URL"`
+	BrokerUser     string           `short:"u" help:"broker user" `
+	BrokerPassword string           `short:"P" help:"broker password" `
+	BrokerPort     int              `short:"p" help:"broker port"`
 	Version        kong.VersionFlag `short:"v" xor:"flags"`
-	Id             string      `short:"i" help:"node id"`
-	Mode           string      `short:"m" enum:"client,server," default:"" help:"client or server,default client"`
+	Id             string           `short:"i" help:"node id"`
+	Mode           string           `short:"m" enum:"client,server," default:"" help:"client or server,default client"`
 }
 
 var (
@@ -102,9 +101,10 @@ type LoggingConfig struct {
 type Config struct {
 	CLI
 	// Logging is the logging configuration
-	Logging LoggingConfig
-	TxTopic string
-	RxTopic string
+	Logging     LoggingConfig
+	TxTopic     string
+	RxTopic     string
+	BeaconTopic string
 }
 
 /// NewConfig creates a new configuration structure
@@ -112,10 +112,11 @@ type Config struct {
 func NewConfig() Config {
 	_, addr := getNetInfo()
 	return Config{
-		CLI:     CLI{BrokerPort: 1883, Mode: "client"},
-		Logging: NewLoggingConfig(),
-		TxTopic: getTxTopic(addr),
-		RxTopic: getRxTopic(addr),
+		CLI:         CLI{BrokerPort: 1883, Mode: "client"},
+		Logging:     NewLoggingConfig(),
+		TxTopic:     getTxTopic(addr),
+		RxTopic:     getRxTopic(addr),
+		BeaconTopic: getBeaconTopic(addr),
 	}
 }
 
@@ -204,6 +205,7 @@ func Parse(v *viper.Viper, configFile string, cli *CLI) (*Config, error) {
 	if config.Id != "" {
 		config.TxTopic = getTxTopic(config.Id)
 		config.RxTopic = getRxTopic(config.Id)
+		config.BeaconTopic = getBeaconTopic(config.Id)
 	}
 
 	return &config, nil
@@ -237,6 +239,7 @@ func stringToLogLevelHookFunc() mapstructure.DecodeHookFunc {
 
 var templateSubTopic = "/mqtt-shell/%s/cmd"
 var templateSubTopicreply = "/mqtt-shell/%s/cmd/res"
+var templateBeaconTopic = "/mqtt-shell/%s/event"
 
 func getNetInfo() (string, string) {
 
@@ -269,5 +272,10 @@ func getTxTopic(nodeID string) string {
 
 func getRxTopic(nodeID string) string {
 	topic := fmt.Sprintf(templateSubTopic, nodeID)
+	return topic
+}
+
+func getBeaconTopic(nodeID string) string {
+	topic := fmt.Sprintf(templateBeaconTopic, nodeID)
 	return topic
 }

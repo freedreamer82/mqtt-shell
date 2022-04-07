@@ -75,7 +75,7 @@ func main() {
 
 	if conf.Mode == "server" {
 		log.Info("Starting server..")
-		mqtt.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic)
+		mqtt.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, mqtt.WithOptionBeaconTopic(conf.BeaconTopic))
 	} else if conf.Mode == "client" {
 
 		log.Info("Starting client..")

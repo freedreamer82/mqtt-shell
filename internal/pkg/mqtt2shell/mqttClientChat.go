@@ -32,7 +32,7 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 
 func (m *MqttClientChat) waitServerCb(data MqttJsonData) {
 
-	if data.Uuid == "" || data.Cmd == "" || data.Data == "" {
+	if data.Uuid == "" || data.Cmd != "shell" || data.Data == "" {
 		return
 	}
 	m.waitServerChan <- true

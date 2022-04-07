@@ -39,6 +39,7 @@ type MqttChat struct {
 	Cb              OnDataCallack
 	txTopic         string
 	rxTopic         string
+	beaconTopic     string
 }
 
 func (m *MqttChat) SetDataCallback(cb OnDataCallack) {
@@ -46,15 +47,29 @@ func (m *MqttChat) SetDataCallback(cb OnDataCallack) {
 }
 
 func (m *MqttChat) getIpAddress() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+	// conn, err := net.Dial("udp", "8.8.8.8:80")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer conn.Close()
+
+	// localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	// return localAddr.IP.String()
+	addrs, err := net.InterfaceAddrs()
 	if err != nil {
-		log.Fatal(err)
+		return ""
 	}
-	defer conn.Close()
+	for _, address := range addrs {
+		// check the address type and if it is not a loopback the display it
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				return ipnet.IP.String()
+			}
+		}
+	}
+	return ""
 
-	localAddr := conn.LocalAddr().(*net.UDPAddr)
-
-	return localAddr.IP.String()
 }
 
 func getRandomClientId() string {
@@ -139,6 +154,19 @@ func (m *MqttChat) onBrokerData(client MQTT.Client, msg MQTT.Message) {
 func (m *MqttChat) onBrokerConnect(client MQTT.Client) {
 	log.Debug("BROKER connected!")
 	m.subscribeMessagesToBroker()
+
+	if m.beaconTopic != "" {
+		now := time.Now().String()
+		reply := MqttJsonData{Ip: m.getIpAddress(), Cmd: "beacon", Datetime: now, Uuid: ""}
+
+		b, err := json.Marshal(reply)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		m.mqttClient.Publish(m.beaconTopic, 0, false, b)
+	}
+
 }
 
 func (m *MqttChat) onBrokerDisconnect(client MQTT.Client, err error) {
@@ -198,7 +226,7 @@ func WithOptionTimeoutCmd(timeout time.Duration) MqttChatOption {
 func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, opts ...MqttChatOption) *MqttChat {
 	rand.Seed(time.Now().UnixNano())
 
-	m := MqttChat{mqttOpts: mqttOpts, rxTopic: rxTopic, txTopic: txtopic, Cb: nil}
+	m := MqttChat{mqttOpts: mqttOpts, rxTopic: rxTopic, txTopic: txtopic, beaconTopic: "", Cb: nil}
 
 	m.timeoutCmdShell = defaultTimeoutCmd
 	for _, opt := range opts {
