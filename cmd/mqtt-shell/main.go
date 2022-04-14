@@ -16,7 +16,7 @@ import (
 )
 
 const INFO = "mqtt-shell\r\nSw Engineer: Marco Garzola"
-const VERSION = "0.0.2"
+const VERSION = "0.0.3"
 
 var CLI config.CLI
 
@@ -75,11 +75,17 @@ func main() {
 
 	if conf.Mode == "server" {
 		log.Info("Starting server..")
-		mqtt.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, mqtt.WithOptionBeaconTopic(conf.BeaconTopic))
+		mqtt.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, VERSION, mqtt.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
 	} else if conf.Mode == "client" {
 
 		log.Info("Starting client..")
-		mqtt.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic)
+		mqtt.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, VERSION)
+	} else if conf.Mode == "beacon" {
+
+		log.Info("Starting beacon discovery..")
+		discovery := mqtt.NewBeaconDiscovery(&mqttOpts, conf.BeaconRequestTopic, conf.BeaconResponseTopic, conf.TimeoutBeaconSec, config.BeaconConverter)
+		discovery.Run()
+		return
 	}
 
 	select {} //wait forever
