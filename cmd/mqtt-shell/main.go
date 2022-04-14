@@ -16,7 +16,7 @@ import (
 )
 
 const INFO = "mqtt-shell\r\nSw Engineer: Marco Garzola"
-const VERSION = "0.0.3"
+const VERSION = "0.0.4"
 
 var CLI config.CLI
 
@@ -30,7 +30,7 @@ func main() {
 			Compact: true,
 		}),
 		kong.Vars{
-			"version": INFO + VERSION,
+			"version": INFO + " - " + VERSION,
 		})
 
 	v := viper.New()
