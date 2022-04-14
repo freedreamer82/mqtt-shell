@@ -12,7 +12,7 @@ import (
 )
 
 const prompt = ">"
-const login = "-------------------------------------------------\r\n|  Mqtt-shell client \r\n|\r\n|  IP: %s \r\n|  TX: %s\r\n|  RX: %s\r\n|\r\n-------------------------------------------------\r\n"
+const login = "-------------------------------------------------\r\n|  Mqtt-shell client \r\n|\r\n|  IP: %s \r\n|  SERVER VER: %s - CLIENT VER: %s\r\n|  TX: %s\r\n|  RX: %s\r\n|\r\n-------------------------------------------------\r\n"
 
 type MqttClientChat struct {
 	*MqttChat
@@ -37,16 +37,17 @@ func (m *MqttClientChat) waitServerCb(data MqttJsonData) {
 	}
 	m.waitServerChan <- true
 	ip := data.Ip
-	m.printLogin(ip)
+	serverVersion := data.Version
+	m.printLogin(ip, serverVersion)
 }
 
 func (m *MqttClientChat) printPrompt() {
 	fmt.Print(prompt)
 }
 
-func (m *MqttClientChat) printLogin(ip string) {
+func (m *MqttClientChat) printLogin(ip string, serverVersion string) {
 	log.Info("Connected")
-	fmt.Printf(login, ip, m.txTopic, m.rxTopic)
+	fmt.Printf(login, ip, serverVersion, m.version, m.txTopic, m.rxTopic)
 	m.printPrompt()
 }
 
@@ -83,10 +84,10 @@ func (m *MqttClientChat) clientTask() {
 	}
 }
 
-func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, opts ...MqttChatOption) *MqttClientChat {
+func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, opts ...MqttChatOption) *MqttClientChat {
 
 	cc := MqttClientChat{}
-	chat := NewChat(mqttOpts, rxTopic, txtopic, opts...)
+	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
 	chat.SetDataCallback(cc.OnDataRx)
 	cc.MqttChat = chat
 	cc.waitServerChan = make(chan bool)

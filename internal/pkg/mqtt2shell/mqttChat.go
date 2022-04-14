@@ -24,6 +24,7 @@ type SubScribeMessage struct {
 
 type MqttJsonData struct {
 	Ip       string `json:"ip"`
+	Version  string `json:"version"`
 	Cmd      string `json:"cmd"`
 	Data     string `json:"data"`
 	Uuid     string `json:"uuid"`
@@ -33,13 +34,15 @@ type MqttJsonData struct {
 type OnDataCallack func(data MqttJsonData)
 
 type MqttChat struct {
-	mqttClient      MQTT.Client
-	mqttOpts        *MQTT.ClientOptions
-	timeoutCmdShell time.Duration
-	Cb              OnDataCallack
-	txTopic         string
-	rxTopic         string
-	beaconTopic     string
+	mqttClient         MQTT.Client
+	mqttOpts           *MQTT.ClientOptions
+	timeoutCmdShell    time.Duration
+	Cb                 OnDataCallack
+	txTopic            string
+	rxTopic            string
+	beaconTopic        string
+	beaconRequestTopic string
+	version            string
 }
 
 func (m *MqttChat) SetDataCallback(cb OnDataCallack) {
@@ -84,12 +87,19 @@ func getRandomClientId() string {
 }
 
 func (m *MqttChat) subscribeMessagesToBroker() error {
-
+	client := m.mqttClient
 	if m.rxTopic != "" {
 		// Go For MQTT Publish
-		client := m.mqttClient
 		log.Printf("Sub topic %s, Qos: %d\r\n", m.rxTopic, 0)
 		if token := client.Subscribe(m.rxTopic, 0, m.onBrokerData); token.Error() != nil {
+			// Return Error
+			return token.Error()
+		}
+	}
+	if m.beaconRequestTopic != "" {
+		// Go For MQTT Publish
+		log.Printf("Sub topic %s, Qos: %d\r\n", m.beaconRequestTopic, 0)
+		if token := client.Subscribe(m.beaconRequestTopic, 0, m.onBeaconRequest); token.Error() != nil {
 			// Return Error
 			return token.Error()
 		}
@@ -106,7 +116,7 @@ func (m *MqttChat) Transmit(out string, uuid string) {
 
 	go func() {
 		now := time.Now().String()
-		reply := MqttJsonData{Ip: m.getIpAddress(), Data: out, Cmd: "shell", Datetime: now, Uuid: uuid}
+		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, Uuid: uuid}
 
 		b, err := json.Marshal(reply)
 		if err != nil {
@@ -151,13 +161,15 @@ func (m *MqttChat) onBrokerData(client MQTT.Client, msg MQTT.Message) {
 	}
 }
 
-func (m *MqttChat) onBrokerConnect(client MQTT.Client) {
-	log.Debug("BROKER connected!")
-	m.subscribeMessagesToBroker()
+func (m *MqttChat) onBeaconRequest(client MQTT.Client, msg MQTT.Message) {
 
+	m.sendBeacon()
+}
+
+func (m *MqttChat) sendBeacon() {
 	if m.beaconTopic != "" {
 		now := time.Now().String()
-		reply := MqttJsonData{Ip: m.getIpAddress(), Cmd: "beacon", Datetime: now, Uuid: ""}
+		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Uuid: ""}
 
 		b, err := json.Marshal(reply)
 		if err != nil {
@@ -166,7 +178,12 @@ func (m *MqttChat) onBrokerConnect(client MQTT.Client) {
 		}
 		m.mqttClient.Publish(m.beaconTopic, 0, false, b)
 	}
+}
 
+func (m *MqttChat) onBrokerConnect(client MQTT.Client) {
+	log.Debug("BROKER connected!")
+	m.subscribeMessagesToBroker()
+	m.sendBeacon()
 }
 
 func (m *MqttChat) onBrokerDisconnect(client MQTT.Client, err error) {
@@ -223,10 +240,10 @@ func WithOptionTimeoutCmd(timeout time.Duration) MqttChatOption {
 	}
 }
 
-func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, opts ...MqttChatOption) *MqttChat {
+func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, version string, opts ...MqttChatOption) *MqttChat {
 	rand.Seed(time.Now().UnixNano())
 
-	m := MqttChat{mqttOpts: mqttOpts, rxTopic: rxTopic, txTopic: txtopic, beaconTopic: "", Cb: nil}
+	m := MqttChat{mqttOpts: mqttOpts, rxTopic: rxTopic, txTopic: txtopic, version: version, beaconTopic: "", Cb: nil}
 
 	m.timeoutCmdShell = defaultTimeoutCmd
 	for _, opt := range opts {

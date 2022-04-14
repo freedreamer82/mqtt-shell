@@ -32,16 +32,17 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 
 }
 
-func WithOptionBeaconTopic(topic string) MqttChatOption {
+func WithOptionBeaconTopic(topic string, topicRequest string) MqttChatOption {
 	return func(h *MqttChat) {
 		h.beaconTopic = topic
+		h.beaconRequestTopic = topicRequest
 	}
 }
 
-func NewServerChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, opts ...MqttChatOption) *MqttServerChat {
+func NewServerChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, opts ...MqttChatOption) *MqttServerChat {
 
 	sc := MqttServerChat{}
-	chat := NewChat(mqttOpts, rxTopic, txtopic, opts...)
+	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
 	chat.SetDataCallback(sc.OnDataRx)
 	sc.MqttChat = chat
 	return &sc
