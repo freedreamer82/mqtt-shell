@@ -105,7 +105,7 @@ func (b *BeaconDiscovery) onBeaconDiscovery(client MQTT.Client, msg MQTT.Message
 		if err != nil {
 			log.Errorln("error deserializing message")
 		}
-		fmt.Printf("Ip: %15s - Id: %20s - Version: %10s - Time: %s\r\n", jData.Ip, nodeId, jData.Version, jData.Datetime)
+		fmt.Printf("Ip: %15s - Id: %20s - Version: %10s - Time: %s - Uptime: %s \r\n", jData.Ip, nodeId, jData.Version, jData.Datetime, jData.Data)
 	}
 
 }

@@ -43,6 +43,7 @@ type MqttChat struct {
 	beaconTopic        string
 	beaconRequestTopic string
 	version            string
+	startTime          time.Time
 }
 
 func (m *MqttChat) SetDataCallback(cb OnDataCallack) {
@@ -169,7 +170,8 @@ func (m *MqttChat) onBeaconRequest(client MQTT.Client, msg MQTT.Message) {
 func (m *MqttChat) sendBeacon() {
 	if m.beaconTopic != "" {
 		now := time.Now().String()
-		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Uuid: ""}
+		fromNow := m.uptime().String()
+		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Uuid: "", Data: fromNow}
 
 		b, err := json.Marshal(reply)
 		if err != nil {
@@ -240,11 +242,16 @@ func WithOptionTimeoutCmd(timeout time.Duration) MqttChatOption {
 	}
 }
 
+func (m *MqttChat) uptime() time.Duration {
+	return time.Since(m.startTime)
+}
+
 func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, version string, opts ...MqttChatOption) *MqttChat {
 	rand.Seed(time.Now().UnixNano())
 
 	m := MqttChat{mqttOpts: mqttOpts, rxTopic: rxTopic, txTopic: txtopic, version: version, beaconTopic: "", Cb: nil}
 
+	m.startTime = time.Now()
 	m.timeoutCmdShell = defaultTimeoutCmd
 	for _, opt := range opts {
 		// Call the option giving the instantiated

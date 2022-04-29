@@ -16,7 +16,7 @@ import (
 )
 
 const INFO = "mqtt-shell\r\nSw Engineer: Marco Garzola"
-const VERSION = "0.0.4"
+const VERSION = "0.0.5"
 
 var CLI config.CLI
 
