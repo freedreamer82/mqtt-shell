@@ -1,4 +1,4 @@
-module mqtt-shell
+module github.com/freedreamer82/mqtt-shell
 
 go 1.13
 
