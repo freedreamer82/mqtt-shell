@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"mqtt-shell/internal/pkg/config"
-	"mqtt-shell/internal/pkg/logging"
 
-	mqtt "mqtt-shell/internal/pkg/mqtt2shell"
+	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
+	"github.com/freedreamer82/mqtt-shell/internal/pkg/logging"
+
+	mqtt "github.com/freedreamer82/mqtt-shell/internal/pkg/mqtt2shell"
 
 	"github.com/alecthomas/kong"
 	MQTT "github.com/eclipse/paho.mqtt.golang"

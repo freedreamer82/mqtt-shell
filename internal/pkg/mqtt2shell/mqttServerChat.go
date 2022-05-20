@@ -3,7 +3,8 @@ package mqtt
 import (
 	"fmt"
 	"log"
-	shell "mqtt-shell/internal/pkg/shellcmd"
+
+	shell "github.com/freedreamer82/mqtt-shell/internal/pkg/shellcmd"
 
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 )

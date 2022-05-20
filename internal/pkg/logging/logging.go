@@ -2,10 +2,10 @@ package logging
 
 import (
 	"io"
-	"mqtt-shell/internal/pkg/config"
 	"os"
 	"time"
 
+	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
 	"github.com/rotisserie/eris"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
