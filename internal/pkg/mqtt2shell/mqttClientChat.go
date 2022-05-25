@@ -18,7 +18,7 @@ const login = "-------------------------------------------------\r\n|  Mqtt-shel
 type MqttClientChat struct {
 	*MqttChat
 	waitServerChan chan bool
-	io             *ClientChatIO
+	io             ClientChatIO
 }
 
 func (m *MqttClientChat) print(a ...interface{}) (n int, err error) {
@@ -114,17 +114,21 @@ func defaultIO() ClientChatIO {
 	}{os.Stdin, os.Stdout}
 }
 
-func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, customIO *ClientChatIO, opts ...MqttChatOption) *MqttClientChat {
-	var actualIO *ClientChatIO
+func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, opts ...MqttChatOption) *MqttClientChat {
 
-	if customIO == nil {
-		defaultIO := defaultIO()
-		actualIO = &defaultIO
-	} else {
-		actualIO = customIO
-	}
+	cc := MqttClientChat{io: defaultIO()}
+	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
+	chat.SetDataCallback(cc.OnDataRx)
+	cc.MqttChat = chat
+	cc.waitServerChan = make(chan bool)
+	go cc.clientTask()
 
-	cc := MqttClientChat{io: actualIO}
+	return &cc
+}
+
+func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, customIO ClientChatIO, opts ...MqttChatOption) *MqttClientChat {
+
+	cc := MqttClientChat{io: customIO}
 	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
 	chat.SetDataCallback(cc.OnDataRx)
 	cc.MqttChat = chat

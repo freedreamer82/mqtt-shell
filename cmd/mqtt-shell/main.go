@@ -80,7 +80,7 @@ func main() {
 	} else if conf.Mode == "client" {
 
 		log.Info("Starting client..")
-		mqtt.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, VERSION, nil)
+		mqtt.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, VERSION)
 	} else if conf.Mode == "beacon" {
 
 		log.Info("Starting beacon discovery..")
