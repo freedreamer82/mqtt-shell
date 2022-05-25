@@ -17,6 +17,7 @@ const login = "-------------------------------------------------\r\n|  Mqtt-shel
 type MqttClientChat struct {
 	*MqttChat
 	waitServerChan chan bool
+	ch             chan []byte
 }
 
 func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
@@ -84,7 +85,11 @@ func (m *MqttClientChat) clientTask() {
 	}
 }
 
-func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, opts ...MqttChatOption) *MqttClientChat {
+func NewClientChat(mqttOpts *MQTT.ClientOptions,
+	rxTopic string,
+	txTopic string,
+	version string,
+	opts ...MqttChatOption) *MqttClientChat {
 
 	cc := MqttClientChat{}
 	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
