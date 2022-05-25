@@ -3,6 +3,7 @@ package mqtt
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
@@ -17,6 +18,23 @@ const login = "-------------------------------------------------\r\n|  Mqtt-shel
 type MqttClientChat struct {
 	*MqttChat
 	waitServerChan chan bool
+	io             *ClientChatIO
+}
+
+func (m *MqttClientChat) print(a ...interface{}) (n int, err error) {
+	return fmt.Fprintln(m.io.Writer, a...)
+}
+
+func (m *MqttClientChat) println() (n int, err error) {
+	return fmt.Fprintln(m.io.Writer)
+}
+
+func (m *MqttClientChat) printf(format string, a ...interface{}) (n int, err error) {
+	return fmt.Fprintf(m.io.Writer, format, a...)
+}
+
+func (m *MqttClientChat) printWithoutLn(a ...interface{}) (n int, err error) {
+	return fmt.Fprint(m.io.Writer, a...)
 }
 
 func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
@@ -25,8 +43,8 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 		return
 	}
 	out := strings.TrimSuffix(data.Data, "\n") // remove newline
-	fmt.Print(out)
-	fmt.Println()
+	m.print(out)
+	m.println()
 	m.printPrompt()
 }
 
@@ -42,12 +60,12 @@ func (m *MqttClientChat) waitServerCb(data MqttJsonData) {
 }
 
 func (m *MqttClientChat) printPrompt() {
-	fmt.Print(prompt)
+	m.printWithoutLn(prompt)
 }
 
 func (m *MqttClientChat) printLogin(ip string, serverVersion string) {
 	log.Info("Connected")
-	fmt.Printf(login, ip, serverVersion, m.version, m.txTopic, m.rxTopic)
+	m.printf(login, ip, serverVersion, m.version, m.txTopic, m.rxTopic)
 	m.printPrompt()
 }
 
@@ -72,7 +90,7 @@ func (m *MqttClientChat) waitServer() {
 func (m *MqttClientChat) clientTask() {
 	m.waitServer()
 	for {
-		scanner := bufio.NewScanner(os.Stdin)
+		scanner := bufio.NewScanner(m.io.Reader)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if line == "" {
@@ -84,9 +102,29 @@ func (m *MqttClientChat) clientTask() {
 	}
 }
 
-func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, opts ...MqttChatOption) *MqttClientChat {
+type ClientChatIO struct {
+	io.Reader
+	io.Writer
+}
 
-	cc := MqttClientChat{}
+func defaultIO() ClientChatIO {
+	return struct {
+		io.Reader
+		io.Writer
+	}{os.Stdin, os.Stdout}
+}
+
+func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, customIO *ClientChatIO, opts ...MqttChatOption) *MqttClientChat {
+	var actualIO *ClientChatIO
+
+	if customIO == nil {
+		defaultIO := defaultIO()
+		actualIO = &defaultIO
+	} else {
+		actualIO = customIO
+	}
+
+	cc := MqttClientChat{io: actualIO}
 	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
 	chat.SetDataCallback(cc.OnDataRx)
 	cc.MqttChat = chat
