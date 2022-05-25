@@ -12,12 +12,21 @@ import (
 )
 
 type CmdScreen struct {
-	container   fyne.CanvasObject
-	cmds        []string
-	selectedCmd int
-	inputcmd    binding.String
-	listData    *widget.List
-	app         fyne.Window
+	container    fyne.CanvasObject
+	cmds         []string
+	selectedCmd  int
+	inputcmd     binding.String
+	listData     *widget.List
+	app          fyne.Window
+	cancelButton *widget.Button
+	okButton     *widget.Button
+	onCLoseCb    OnClosePopUp
+}
+
+type OnClosePopUp func(screen *CmdScreen, cmd string)
+
+func (s *CmdScreen) SetOnCloseCallback(cb OnClosePopUp) {
+	s.onCLoseCb = cb
 }
 
 func (s *CmdScreen) GetContainer() fyne.CanvasObject {
@@ -47,13 +56,30 @@ func (s *CmdScreen) addCommandAndShowInfo(cmd string) {
 		s.cmds = append(s.cmds, cmd)
 	}
 }
+func (s *CmdScreen) notifyCb() {
+	if s.onCLoseCb != nil {
+		cmd := ""
+		if s.selectedCmd >= 0 {
+			cmd = s.cmds[s.selectedCmd]
+		}
+		s.onCLoseCb(s, cmd)
+	}
+}
 
 func (s *CmdScreen) ShowPopUp() {
 	s.selectedCmd = -1
 
-	cancelButton := widget.NewButton("Cancel", func() {
+	s.cancelButton = widget.NewButton("Cancel", func() {
 		s.container.Hide()
+		s.notifyCb()
+
 	})
+
+	s.okButton = widget.NewButton("Ok", func() {
+		s.container.Hide()
+		s.notifyCb()
+	})
+	s.okButton.Disable()
 
 	var cmdDeleteButton = widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
 
@@ -77,12 +103,13 @@ func (s *CmdScreen) ShowPopUp() {
 		},
 	)
 	s.listData.OnSelected = func(id widget.ListItemID) {
-		fmt.Printf("selected %d", id)
+		//fmt.Printf("selected %d", id)
 		//popup.Hide()
+		s.okButton.Enable()
 		s.selectedCmd = id
 	}
 
-	c := container.NewBorder(nil, cancelButton, nil, nil,
+	c := container.NewBorder(nil, container.NewHBox(s.cancelButton, s.okButton), nil, nil,
 		container.NewScroll(s.listData))
 
 	s.container = widget.NewModalPopUp(c, s.app.Canvas())
@@ -93,7 +120,7 @@ func (s *CmdScreen) ShowPopUp() {
 
 func NewCmdOverlay(app fyne.Window) *CmdScreen {
 
-	s := CmdScreen{}
+	s := CmdScreen{onCLoseCb: nil}
 	s.selectedCmd = -1
 	s.app = app
 

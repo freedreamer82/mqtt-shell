@@ -115,7 +115,8 @@ func defaultIO() ClientChatIO {
 	}{os.Stdin, os.Stdout}
 }
 
-func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, opts ...MqttChatOption) *MqttClientChat {
+func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string,
+	version string, opts ...MqttChatOption) *MqttClientChat {
 
 	cc := MqttClientChat{io: defaultIO()}
 	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
@@ -127,7 +128,8 @@ func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string,
 	return &cc
 }
 
-func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, customIO ClientChatIO, opts ...MqttChatOption) *MqttClientChat {
+func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string,
+	customIO ClientChatIO, opts ...MqttChatOption) *MqttClientChat {
 
 	cc := MqttClientChat{io: customIO}
 	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
