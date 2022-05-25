@@ -10,6 +10,14 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type Client struct {
+	Id      string
+	Ip      string
+	Version string
+	Time    string
+	Uptime  string
+}
+
 type BeaconDiscovery struct {
 	mqttClient          MQTT.Client
 	mqttOpts            *MQTT.ClientOptions
@@ -18,16 +26,35 @@ type BeaconDiscovery struct {
 	timeout             time.Duration
 	closeChan           chan bool
 	converter           NodeIdFromTopic
+	clients             chan Client
+	cb                  ConnectionCallback
+	timerCheckEnabled   bool
 }
 
+type BeaconDiscoveryOption func(*BeaconDiscovery)
 type NodeIdFromTopic func(string) string
 
-func NewBeaconDiscovery(mqttOpts *MQTT.ClientOptions, beaconRequestTopic string, beaconResponseTopic string, timeoutDiscoverySec uint64, converter NodeIdFromTopic) *BeaconDiscovery {
+func WithDiscoveryConnectionCallaback(cb ConnectionCallback) BeaconDiscoveryOption {
+	return func(h *BeaconDiscovery) {
+		h.cb = cb
+	}
+}
+
+func WithDiscoveryMqttClient(client MQTT.Client) BeaconDiscoveryOption {
+	return func(h *BeaconDiscovery) {
+		h.mqttClient = client
+	}
+}
+
+func NewBeaconDiscovery(mqttOpts *MQTT.ClientOptions,
+	beaconRequestTopic string, beaconResponseTopic string, timeoutDiscoverySec uint64,
+	converter NodeIdFromTopic, opts ...BeaconDiscoveryOption) *BeaconDiscovery {
 	rand.Seed(time.Now().UnixNano())
 
 	timeout := time.Duration(timeoutDiscoverySec * uint64(time.Second))
 
-	b := BeaconDiscovery{mqttOpts: mqttOpts, beaconRequestTopic: beaconRequestTopic, beaconResponseTopic: beaconResponseTopic, timeout: timeout, converter: converter}
+	b := BeaconDiscovery{mqttOpts: mqttOpts, cb: nil,
+		beaconRequestTopic: beaconRequestTopic, beaconResponseTopic: beaconResponseTopic, timeout: timeout, converter: converter, timerCheckEnabled: true}
 
 	if b.mqttOpts.ClientID == "" {
 		b.mqttOpts.SetClientID(getRandomClientId())
@@ -38,14 +65,24 @@ func NewBeaconDiscovery(mqttOpts *MQTT.ClientOptions, beaconRequestTopic string,
 	b.mqttOpts.SetConnectionLostHandler(b.onBrokerDisconnect)
 	b.mqttOpts.SetOnConnectHandler(b.onBrokerConnect)
 
-	b.mqttClient = MQTT.NewClient(b.mqttOpts)
+	for _, opt := range opts {
+		// Call the option giving the instantiated
+		opt(&b)
+	}
+
+	if b.mqttClient == nil {
+		b.mqttClient = MQTT.NewClient(b.mqttOpts)
+
+	}
 
 	return &b
 }
 
-func (b *BeaconDiscovery) Run() {
+func (b *BeaconDiscovery) Run(ch chan Client) {
 
 	b.brokerStartConnect()
+
+	b.clients = ch
 
 	start := time.Now()
 
@@ -62,13 +99,18 @@ func (b *BeaconDiscovery) Run() {
 	select {
 	case <-b.closeChan:
 		{
+			b.timerCheckEnabled = false
 			log.Infoln("Stop beacon discovery")
 			b.mqttClient.Disconnect(100)
 		}
 	}
+
 }
 
 func (b *BeaconDiscovery) onBrokerConnect(client MQTT.Client) {
+	if b.cb != nil {
+		b.cb(ConnectionStatus_Connected)
+	}
 	log.Debugln("Connect to broker")
 	err := b.subscribeMessagesToBroker()
 	if err != nil {
@@ -80,6 +122,9 @@ func (b *BeaconDiscovery) onBrokerConnect(client MQTT.Client) {
 func (b *BeaconDiscovery) onBrokerDisconnect(client MQTT.Client, err error) {
 	log.Debug("BROKER disconnected !", err)
 	b.closeChan <- true
+	if b.cb != nil {
+		b.cb(ConnectionStatus_Disconnected)
+	}
 }
 
 func (b *BeaconDiscovery) subscribeMessagesToBroker() error {
@@ -105,6 +150,13 @@ func (b *BeaconDiscovery) onBeaconDiscovery(client MQTT.Client, msg MQTT.Message
 		if err != nil {
 			log.Errorln("error deserializing message")
 		}
+		c := Client{Id: nodeId, Ip: jData.Ip, Version: jData.Version,
+			Time: jData.Datetime, Uptime: jData.Data}
+
+		if b.clients != nil {
+			b.clients <- c
+		}
+
 		fmt.Printf("Ip: %15s - Id: %20s - Version: %10s - Time: %s - Uptime: %s \r\n", jData.Ip, nodeId, jData.Version, jData.Datetime, jData.Data)
 	}
 
@@ -127,9 +179,11 @@ func (b *BeaconDiscovery) brokerStartConnect() {
 		for {
 			select {
 			case <-retry.C:
-				if !b.mqttClient.IsConnected() {
-					if token := b.mqttClient.Connect(); token.Wait() && token.Error() != nil {
-						log.Info("failed connection to broker retrying...")
+				if b.timerCheckEnabled {
+					if !b.mqttClient.IsConnected() {
+						if token := b.mqttClient.Connect(); token.Wait() && token.Error() != nil {
+							log.Info("failed connection to broker retrying...")
+						}
 					} else {
 						return
 					}
@@ -138,5 +192,7 @@ func (b *BeaconDiscovery) brokerStartConnect() {
 				}
 			}
 		}
+		fmt.Println("exit from check timer mqtt..")
 	}(b)
+
 }

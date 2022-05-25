@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
 
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/logging"
@@ -16,9 +17,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-const INFO = "mqtt-shell\r\nSw Engineer: Marco Garzola"
-const VERSION = "0.0.5"
-
 var CLI config.CLI
 
 func main() {
@@ -31,7 +29,7 @@ func main() {
 			Compact: true,
 		}),
 		kong.Vars{
-			"version": INFO + " - " + VERSION,
+			"version": constant.INFO + " - " + constant.VERSION,
 		})
 
 	v := viper.New()
@@ -76,16 +74,19 @@ func main() {
 
 	if conf.Mode == "server" {
 		log.Info("Starting server..")
-		mqtt.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, VERSION, mqtt.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
+		chat := mqtt.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, constant.VERSION, mqtt.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
+		chat.Start()
 	} else if conf.Mode == "client" {
 
 		log.Info("Starting client..")
-		mqtt.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, VERSION)
+		chat := mqtt.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, constant.VERSION)
+		chat.Start()
 	} else if conf.Mode == "beacon" {
 
 		log.Info("Starting beacon discovery..")
-		discovery := mqtt.NewBeaconDiscovery(&mqttOpts, conf.BeaconRequestTopic, conf.BeaconResponseTopic, conf.TimeoutBeaconSec, config.BeaconConverter)
-		discovery.Run()
+		discovery := mqtt.NewBeaconDiscovery(&mqttOpts, conf.BeaconRequestTopic, conf.BeaconResponseTopic, conf.TimeoutBeaconSec,
+			config.BeaconConverter, nil)
+		discovery.Run(nil)
 		return
 	}
 

@@ -26,6 +26,8 @@ const (
 	defaultLogFileMaxSize = 10 * 1024 * 1024 // 10 Megabytes
 
 )
+const INFO = "mqtt-shell\r\nSw Engineer: Marco Garzola"
+const VERSION = "0.0.5"
 
 type CLI struct {
 	ConfigFile     string           `short:"c" xor:"config" type:"existingfile"`
@@ -120,8 +122,8 @@ func NewConfig() Config {
 		TxTopic:             getTxTopic(addr),
 		RxTopic:             getRxTopic(addr),
 		BeaconTopic:         getBeaconTopic(addr),
-		BeaconRequestTopic:  beaconRequestTopic,
-		BeaconResponseTopic: getBeaconTopic("+"),
+		BeaconRequestTopic:  BeaconRequestTopic,
+		BeaconResponseTopic: BeaconReplyTopic, //getBeaconTopic("+"),
 		TimeoutBeaconSec:    10,
 	}
 }
@@ -212,7 +214,7 @@ func Parse(v *viper.Viper, configFile string, cli *CLI) (*Config, error) {
 		config.TxTopic = getTxTopic(config.Id)
 		config.RxTopic = getRxTopic(config.Id)
 		config.BeaconTopic = getBeaconTopic(config.Id)
-		config.BeaconRequestTopic = beaconRequestTopic
+		config.BeaconRequestTopic = BeaconRequestTopic
 		config.BeaconResponseTopic = getBeaconTopic("+")
 	}
 
@@ -247,11 +249,12 @@ func stringToLogLevelHookFunc() mapstructure.DecodeHookFunc {
 
 const topicPrefix = "/mqtt-shell/"
 
-var templateSubTopic = topicPrefix + "%s/cmd"
-var templateSubTopicreply = topicPrefix + "%s/cmd/res"
-var templateBeaconTopic = topicPrefix + "%s/event"
+var TemplateSubTopic = topicPrefix + "%s/cmd"
+var TemplateSubTopicreply = topicPrefix + "%s/cmd/res"
+var TemplateBeaconTopic = topicPrefix + "%s/event"
 
-const beaconRequestTopic = topicPrefix + "whoami"
+const BeaconRequestTopic = topicPrefix + "whoami"
+const BeaconReplyTopic = topicPrefix + "+/event"
 
 func getNetInfo() (string, string) {
 
@@ -278,17 +281,17 @@ func getNetInfo() (string, string) {
 }
 
 func getTxTopic(nodeID string) string {
-	topic := fmt.Sprintf(templateSubTopicreply, nodeID)
+	topic := fmt.Sprintf(TemplateSubTopicreply, nodeID)
 	return topic
 }
 
 func getRxTopic(nodeID string) string {
-	topic := fmt.Sprintf(templateSubTopic, nodeID)
+	topic := fmt.Sprintf(TemplateSubTopic, nodeID)
 	return topic
 }
 
 func getBeaconTopic(nodeID string) string {
-	topic := fmt.Sprintf(templateBeaconTopic, nodeID)
+	topic := fmt.Sprintf(TemplateBeaconTopic, nodeID)
 	return topic
 }
 
