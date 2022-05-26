@@ -2,6 +2,8 @@ package screens
 
 import (
 	"fmt"
+	"strconv"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -21,6 +23,8 @@ type CmdScreen struct {
 	cancelButton *widget.Button
 	okButton     *widget.Button
 	onCLoseCb    OnClosePopUp
+	storage      fyne.Preferences
+	cmdNo        int
 }
 
 type OnClosePopUp func(screen *CmdScreen, cmd string)
@@ -54,6 +58,9 @@ func (s *CmdScreen) addCommandAndShowInfo(cmd string) {
 		c := fmt.Sprintf("%s", cmd)
 		dialog.ShowInformation("Cmd Added", c, s.app)
 		s.cmds = append(s.cmds, cmd)
+		s.storage.SetString(keyCmd+strconv.Itoa(s.cmdNo), cmd)
+		s.cmdNo++
+		s.storage.SetInt(keyCmdNumber, s.cmdNo)
 	}
 }
 func (s *CmdScreen) notifyCb() {
@@ -85,6 +92,13 @@ func (s *CmdScreen) ShowPopUp() {
 
 		if s.listData != nil && s.selectedCmd >= 0 {
 			s.cmds = append(s.cmds[:s.selectedCmd], s.cmds[s.selectedCmd+1:]...)
+			s.storage.RemoveValue(keyCmd + strconv.Itoa(s.selectedCmd))
+			s.cmdNo--
+			s.storage.SetInt(keyCmdNumber, s.cmdNo)
+		}
+
+		if len(s.cmds) == 0 {
+			s.okButton.Disable()
 		}
 		s.selectedCmd = -1
 		s.listData.Refresh()
@@ -96,12 +110,16 @@ func (s *CmdScreen) ShowPopUp() {
 			return len(s.cmds)
 		},
 		func() fyne.CanvasObject {
-			return container.NewHBox(widget.NewLabel(""), layout.NewSpacer(), cmdDeleteButton)
+			return container.NewBorder(nil, nil, nil, container.NewHBox(layout.NewSpacer(), widget.NewSeparator(), cmdDeleteButton), widget.NewLabel("empty"))
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
 			item.(*fyne.Container).Objects[0].(*widget.Label).SetText(s.cmds[id])
 		},
 	)
+
+	//s.listData.OnUnselected = func(id widget.ListItemID) {
+	//	fmt.Println("unselected")
+	//}
 	s.listData.OnSelected = func(id widget.ListItemID) {
 		//fmt.Printf("selected %d", id)
 		//popup.Hide()
@@ -118,11 +136,24 @@ func (s *CmdScreen) ShowPopUp() {
 	s.container.Show()
 }
 
-func NewCmdOverlay(app fyne.Window) *CmdScreen {
+const keyCmdNumber = "cmdnumber"
+const keyCmd = "cmd"
+
+func NewCmdOverlay(app fyne.Window, storage fyne.Preferences) *CmdScreen {
 
 	s := CmdScreen{onCLoseCb: nil}
 	s.selectedCmd = -1
+	s.storage = storage
 	s.app = app
+
+	s.cmdNo = s.storage.IntWithFallback(keyCmdNumber, 0)
+
+	for i := 0; i < s.cmdNo; i++ {
+		cmd := s.storage.String(keyCmd + strconv.Itoa(i))
+		if cmd != "" {
+			s.cmds = append(s.cmds, cmd)
+		}
+	}
 
 	return &s
 }

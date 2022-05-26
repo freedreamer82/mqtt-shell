@@ -2,6 +2,10 @@ package screens
 
 import (
 	"fmt"
+	"image/color"
+	"io"
+	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
@@ -9,9 +13,6 @@ import (
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
 	mqtt "github.com/freedreamer82/mqtt-shell/internal/pkg/mqtt2shell"
-	"image/color"
-	"io"
-	"strings"
 )
 
 type blackRenderer struct {
@@ -36,6 +37,7 @@ type MainScreen struct {
 	app           fyne.App
 	scroll        *container.Scroll
 	chanReadReady chan bool
+	connectedIcon *widget.Icon
 }
 
 func (s *MainScreen) Read(p []byte) (n int, err error) {
@@ -102,6 +104,7 @@ func (s *MainScreen) clientCb(c string) {
 	s.clientName.SetText(c)
 
 	s.connectedText.SetText("connected")
+	s.connectedIcon.SetResource(theme.ConfirmIcon())
 
 	txTopic := fmt.Sprintf(config.TemplateSubTopic, c)
 	rxTopic := fmt.Sprintf(config.TemplateSubTopicreply, c)
@@ -123,11 +126,10 @@ func (s *MainScreen) clientCb(c string) {
 
 }
 
-//const example = "-------------------------------------------------\n|  Mqtt-shell client \n|\n|  IP: 192.168.50.154 \n|  SERVER VER: 0.0.5 - CLIENT VER: 0.0.5\n|  TX: /mqtt-shell/mouseberry-polimi/cmd/res\n|  RX: /mqtt-shell/mouseberry-polimi/cmd/res\n|\n-------------------------------------------------\n>\n-------------------------------------------------\n|  Mqtt-shell client \n|\n|  IP: 192.168.50.154 \n|  SERVER VER: 0.0.5 - CLIENT VER: 0.0.5\n|  TX: /mqtt-shell/mouseberry-polimi/cmd/res\n|  RX: /mqtt-shell/mouseberry-polimi/cmd/res\n|\n-------------------------------------------------\n>\n-------------------------------------------------\n|  Mqtt-shell client \n|\n|  IP: 192.168.50.154 \n|  SERVER VER: 0.0.5 - CLIENT VER: 0.0.5\n|  TX: /mqtt-shell/mouseberry-polimi/cmd/res\n|  RX: /mqtt-shell/mouseberry-polimi/cmd/res\n|\n-------------------------------------------------\n>\n"
-
 func (s *MainScreen) onCloseCmdCb(screen *CmdScreen, cmd string) {
 	if cmd != "" {
 		s.input.SetText(cmd)
+
 	}
 }
 
@@ -144,7 +146,8 @@ func (s *MainScreen) clear() {
 func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	input := widget.NewEntry()
 
-	s := MainScreen{mqttScreen: NewMqttDialog(appWindow, app.Preferences()), cmdScreen: NewCmdOverlay(appWindow), input: input, app: app}
+	s := MainScreen{mqttScreen: NewMqttDialog(appWindow, app.Preferences()),
+		cmdScreen: NewCmdOverlay(appWindow, app.Preferences()), input: input, app: app}
 	s.chanReadReady = make(chan bool)
 	s.cmdScreen.SetOnCloseCallback(s.onCloseCmdCb)
 
@@ -174,8 +177,8 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	icon := theme.MediaRecordIcon()
 
 	s.connectedText = widget.NewLabel("disconnected")
-	connectedIcon := widget.NewIcon(icon)
-	connectedIcon.SetResource(theme.ContentClearIcon())
+	s.connectedIcon = widget.NewIcon(icon)
+	s.connectedIcon.SetResource(theme.ContentClearIcon())
 
 	addCommandButton := widget.NewButton("", func() {
 		s.cmdScreen.AddNewCommand(input.Text)
@@ -188,14 +191,25 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	})
 	cmdListButton.SetIcon(theme.MenuDropUpIcon())
 
-	s.scroll = container.NewVScroll(s.shell)
+	clearInput := widget.NewButton("", func() {
+		s.input.SetText("")
+	})
+	clearInput.SetIcon(theme.ContentClearIcon())
 
-	cont := container.NewBorder(container.NewBorder(nil, nil, nil,
-		container.NewHBox(scan, s.connectedText, connectedIcon), s.clientName),
-		container.NewBorder(nil, nil, nil, container.NewHBox(addCommandButton, cmdListButton, sendButton), input), nil, nil,
+	s.scroll = container.NewScroll(s.shell)
+	//s.scroll.SetMinSize(fyne.NewSize(32, 128))
+
+	cont := container.NewBorder(
+		container.NewBorder(nil, nil, nil, container.NewHBox(scan, s.connectedText, s.connectedIcon), s.clientName),
+		container.NewBorder(nil, nil, nil, container.NewHBox(clearInput, addCommandButton, cmdListButton, sendButton), input),
+		nil, nil,
 		s.scroll)
 
-	cont.Resize(fyne.NewSize(300, 300))
+	//  cont.Resize(fyne.NewSize(300, 300))
+
+	//input.OnChanged = func(cmd string) {
+	//	fmt.Println(cmd)
+	//}
 
 	s.container = cont
 	s.input = input

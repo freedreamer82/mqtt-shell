@@ -22,6 +22,7 @@ func main() {
 	app := screens.NewMainScreen(myApp, window)
 
 	window.SetContent(app.GetContainer())
+
 	window.ShowAndRun()
 
 }
