@@ -64,10 +64,30 @@ func (s *MainScreen) Read(p []byte) (n int, err error) {
 	return 0, nil
 }
 
+const shellHistoryDepthLines = 30
+
 func (s *MainScreen) Write(p []byte) (n int, err error) {
 	toTrim := string(p)
 	trimmed := strings.Replace(toTrim, "\r\n", "\n", -1)
-	s.shell.SetText(s.shell.Text() + trimmed)
+
+	text := s.shell.Text() + trimmed
+	lines := strings.Split(text, "\n")
+
+	startIdx := len(lines) - shellHistoryDepthLines
+	if startIdx < 0 {
+		startIdx = 0
+	}
+
+	text = ""
+	for i := startIdx; i < len(lines); i++ {
+		text += lines[i]
+		if i < len(lines)-1 {
+			text += "\n"
+		}
+
+	}
+
+	s.shell.SetText(text)
 	s.scroll.ScrollToBottom()
 
 	return len(p), nil
@@ -132,7 +152,7 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 		s.clear()
 	})
 	input.OnSubmitted = func(tosend string) {
-		//s.Write([]byte(fmt.Sprintf("%s\n", tosend)))
+		s.Write([]byte(fmt.Sprintf("%s", tosend)))
 		s.Write([]byte("\n"))
 		s.chanReadReady <- true
 	}
