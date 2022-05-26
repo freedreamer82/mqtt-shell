@@ -23,7 +23,7 @@ type MqttClientChat struct {
 }
 
 func (m *MqttClientChat) print(a ...interface{}) (n int, err error) {
-	return fmt.Fprintln(m.io.Writer, a...)
+	return fmt.Fprint(m.io.Writer, a...)
 }
 
 func (m *MqttClientChat) println() (n int, err error) {

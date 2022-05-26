@@ -85,7 +85,7 @@ func main() {
 
 		log.Info("Starting beacon discovery..")
 		discovery := mqtt.NewBeaconDiscovery(&mqttOpts, conf.BeaconRequestTopic, conf.BeaconResponseTopic, conf.TimeoutBeaconSec,
-			config.BeaconConverter, nil)
+			config.BeaconConverter)
 		discovery.Run(nil)
 		return
 	}

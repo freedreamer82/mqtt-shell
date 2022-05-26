@@ -11,6 +11,7 @@ import (
 	mqtt "github.com/freedreamer82/mqtt-shell/internal/pkg/mqtt2shell"
 	"image/color"
 	"io"
+	"strings"
 )
 
 type blackRenderer struct {
@@ -64,18 +65,10 @@ func (s *MainScreen) Read(p []byte) (n int, err error) {
 }
 
 func (s *MainScreen) Write(p []byte) (n int, err error) {
-	//trimmed := strings.Replace(string(p), "\r\n", "\n", -1)
-	trimmed := string(p)
-	//i := strings.LastIndex(trimmed, "\r\n")
-	//if i > 0 {
-	//	trimmed = trimmed[:i]
-	//}
-	//excludingLast := trimmed[:i] + strings.Replace(trimmed[i:], "\n", "", 1)
-	//fmt.Println(excludingLast)
-
+	toTrim := string(p)
+	trimmed := strings.Replace(toTrim, "\r\n", "\n", -1)
 	s.shell.SetText(s.shell.Text() + trimmed)
 	s.scroll.ScrollToBottom()
-	s.scroll.Refresh()
 
 	return len(p), nil
 }
@@ -90,8 +83,8 @@ func (s *MainScreen) clientCb(c string) {
 
 	s.connectedText.SetText("connected")
 
-	txTopic := fmt.Sprintf(config.TemplateSubTopicreply, c)
-	rxTopic := fmt.Sprintf(config.TemplateSubTopic, c)
+	txTopic := fmt.Sprintf(config.TemplateSubTopic, c)
+	rxTopic := fmt.Sprintf(config.TemplateSubTopicreply, c)
 
 	if s.client == nil {
 		c := struct {
@@ -99,7 +92,8 @@ func (s *MainScreen) clientCb(c string) {
 			io.Writer
 		}{s, s}
 
-		s.client = mqtt.NewClientChatWithCustomIO(s.mqttScreen.mqttOpts, txTopic, rxTopic, constant.VERSION, c)
+		s.client = mqtt.NewClientChatWithCustomIO(s.mqttScreen.mqttOpts, rxTopic, txTopic, constant.VERSION, c)
+
 	}
 
 	if s.client.IsRunning() {
@@ -138,6 +132,8 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 		s.clear()
 	})
 	input.OnSubmitted = func(tosend string) {
+		//s.Write([]byte(fmt.Sprintf("%s\n", tosend)))
+		s.Write([]byte("\n"))
 		s.chanReadReady <- true
 	}
 
