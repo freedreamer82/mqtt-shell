@@ -60,8 +60,8 @@ func (s *ScanScreen) Scan() {
 		for {
 			select {
 			case client := <-clients:
-				fmt.Printf("Ip: %15s - Id: %20s - Version: %10s - Time: %s - Uptime: %s \r\n", client.Ip,
-					client.Id, client.Version, client.Time, client.Uptime)
+				//fmt.Printf("Ip: %15s - Id: %20s - Version: %10s - Time: %s - Uptime: %s \r\n", client.Ip,
+				//	client.Id, client.Version, client.Time, client.Uptime)
 				s.clients = append(s.clients, client.Id)
 			case <-quit:
 				fmt.Printf("End Scan...")
@@ -116,7 +116,6 @@ func (s *ScanScreen) ShowPopUp() {
 	)
 	s.listData.OnSelected = func(id widget.ListItemID) {
 		fmt.Printf("selected %d", id)
-		//popup.Hide()
 		s.selectedCmd = id
 		okButton.Enable()
 	}

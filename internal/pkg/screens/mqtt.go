@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	MQTT "github.com/eclipse/paho.mqtt.golang"
+	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
 	mqtt "github.com/freedreamer82/mqtt-shell/internal/pkg/mqtt2shell"
 )
 
@@ -83,10 +84,10 @@ func (s *MqttDialog) createForm() {
 
 	s.dialog = dialog.NewForm("Mqtt broker settings", "Connect", "Cancel",
 		[]*widget.FormItem{
-			{Text: "Broker", Widget: s.broker, HintText: "MQTT broker to connect to"},
-			{Text: "Port", Widget: s.port, HintText: "MQTT broker port"},
-			{Text: "User", Widget: s.user, HintText: "User to use for connecting (optional)"},
-			{Text: "Password", Widget: s.password, HintText: "User password to use for connecting (optional)"},
+			{Text: constant.MQTT_SCREEN_Broker, Widget: s.broker, HintText: "MQTT broker to connect to"},
+			{Text: constant.MQTT_SCREEN_Port, Widget: s.port, HintText: "MQTT broker port"},
+			{Text: constant.MQTT_SCREEN_User, Widget: s.user, HintText: "User to use for connecting (optional)"},
+			{Text: constant.MQTT_SCREEN_Password, Widget: s.password, HintText: "User password to use for connecting (optional)"},
 		},
 		func(confirm bool) {
 			if !confirm {
@@ -121,14 +122,20 @@ func (s *MqttDialog) createForm() {
 			}
 
 		}, s.app)
-	s.dialog.Resize(fyne.NewSize(s.app.Canvas().Size().Width/2, s.app.Canvas().Size().Height/2))
+
+	wsize := fyne.NewSize(s.app.Canvas().Size().Width/2, s.app.Canvas().Size().Height/2)
+	s.dialog.Resize(wsize)
 	s.dialog.Show()
 
 }
 
+//
+//func (s *MqttDialog) Show() {
+//	s.createForm()
+//}
+
 func NewMqttDialog(app fyne.Window, storage fyne.Preferences) *MqttDialog {
 	w := widget.NewLabel("")
-
 	s := MqttDialog{container: w, app: app, storage: storage}
 	s.scanScreen = NewScanOverlay(app, s.mqttOpts)
 	s.user = widget.NewEntry()
@@ -137,8 +144,7 @@ func NewMqttDialog(app fyne.Window, storage fyne.Preferences) *MqttDialog {
 	s.port = widget.NewEntry()
 
 	s.createForm()
-	s.dialog.Resize(fyne.NewSize(400, 100))
-	//s.dialog.Show()
+	s.dialog.Resize(fyne.NewSize(constant.MainWindowW/2, constant.MainWindowH/2))
 
 	return &s
 }

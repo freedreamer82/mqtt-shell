@@ -38,7 +38,7 @@ type CLI struct {
 	BrokerPort     int              `short:"p" help:"broker port"`
 	Version        kong.VersionFlag `short:"v" xor:"flags"`
 	Id             string           `short:"i" help:"node id"`
-	Mode           string           `short:"m" enum:"client,server,beacon" default:"client" help:"client, server or beacon,default client"`
+	Mode           string           `short:"m" enum:"client,server,beacon,gui" default:"client" help:"client, server or beacon,default client"`
 }
 
 var (

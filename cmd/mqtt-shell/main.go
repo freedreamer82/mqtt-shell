@@ -2,7 +2,11 @@ package main
 
 import (
 	"fmt"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
+	"github.com/freedreamer82/mqtt-shell/internal/pkg/locale"
+	"github.com/freedreamer82/mqtt-shell/internal/pkg/screens"
 
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/logging"
@@ -18,6 +22,23 @@ import (
 )
 
 var CLI config.CLI
+
+func rungui() {
+
+	myApp := app.NewWithID(constant.APP_ID)
+	window := myApp.NewWindow(locale.AppWindowName)
+
+	window.CenterOnScreen()
+	//window.SetIcon(resourceLogoSvg)
+	window.Resize(fyne.NewSize(constant.MainWindowW, constant.MainWindowH))
+
+	app := screens.NewMainScreen(myApp, window)
+
+	window.SetContent(app.GetContainer())
+
+	window.ShowAndRun()
+
+}
 
 func main() {
 
@@ -54,6 +75,10 @@ func main() {
 		conf.Logging.Level = log.TraceLevel
 	}
 	logging.Setup(&conf.Logging)
+
+	if conf.Mode == "gui" {
+		rungui()
+	}
 
 	if conf.Broker == "" {
 		fmt.Println("Broker required: ")

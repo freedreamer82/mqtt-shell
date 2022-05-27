@@ -24,20 +24,23 @@ func (p *blackRenderer) BackgroundColor() color.Color {
 }
 
 type MainScreen struct {
-	container     fyne.CanvasObject
-	sendButton    *widget.Button
-	input         *widget.Entry
-	isConnected   bool
-	cmdScreen     *CmdScreen
-	clientName    *widget.Entry
-	shell         *widget.TextGrid
-	mqttScreen    *MqttDialog
-	connectedText *widget.Label
-	client        *mqtt.MqttClientChat
-	app           fyne.App
-	scroll        *container.Scroll
-	chanReadReady chan bool
-	connectedIcon *widget.Icon
+	container        fyne.CanvasObject
+	sendButton       *widget.Button
+	input            *widget.Entry
+	isConnected      bool
+	cmdScreen        *CmdScreen
+	clientName       *widget.Entry
+	shell            *widget.TextGrid
+	mqttScreen       *MqttDialog
+	connectedText    *widget.Label
+	client           *mqtt.MqttClientChat
+	app              fyne.App
+	appWindow        fyne.Window
+	scroll           *container.Scroll
+	chanReadReady    chan bool
+	connectedIcon    *widget.Icon
+	progressBar      *widget.ProgressBarInfinite
+	progressBarPopUp *widget.PopUp
 }
 
 func (s *MainScreen) Read(p []byte) (n int, err error) {
@@ -69,6 +72,12 @@ func (s *MainScreen) Read(p []byte) (n int, err error) {
 const shellHistoryDepthLines = 30
 
 func (s *MainScreen) Write(p []byte) (n int, err error) {
+
+	if s.progressBar != nil && s.progressBarPopUp.Visible() {
+		s.progressBar.Stop()
+		s.progressBarPopUp.Hide()
+	}
+
 	toTrim := string(p)
 	trimmed := strings.Replace(toTrim, "\r\n", "\n", -1)
 
@@ -86,7 +95,6 @@ func (s *MainScreen) Write(p []byte) (n int, err error) {
 		if i < len(lines)-1 {
 			text += "\n"
 		}
-
 	}
 
 	s.shell.SetText(text)
@@ -101,9 +109,10 @@ func (s *MainScreen) createRenderer() fyne.WidgetRenderer {
 }
 
 func (s *MainScreen) clientCb(c string) {
+
 	s.clientName.SetText(c)
 
-	s.connectedText.SetText("connected")
+	s.connectedText.SetText(constant.HOME_SCREEN_Broker_Connected)
 	s.connectedIcon.SetResource(theme.ConfirmIcon())
 
 	txTopic := fmt.Sprintf(config.TemplateSubTopic, c)
@@ -123,6 +132,12 @@ func (s *MainScreen) clientCb(c string) {
 		s.client.Stop()
 	}
 	s.client.Start()
+
+	if s.progressBar != nil && !s.progressBarPopUp.Visible() {
+		s.progressBar.Start()
+		s.progressBarPopUp.Resize(fyne.NewSize(s.appWindow.Canvas().Size().Width/2, s.appWindow.Canvas().Size().Height/20))
+		s.progressBarPopUp.Show()
+	}
 
 }
 
@@ -144,14 +159,16 @@ func (s *MainScreen) clear() {
 }
 
 func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
+
 	input := widget.NewEntry()
 
 	s := MainScreen{mqttScreen: NewMqttDialog(appWindow, app.Preferences()),
-		cmdScreen: NewCmdOverlay(appWindow, app.Preferences()), input: input, app: app}
+		cmdScreen: NewCmdOverlay(appWindow, app.Preferences()),
+		input:     input, app: app, appWindow: appWindow}
 	s.chanReadReady = make(chan bool)
 	s.cmdScreen.SetOnCloseCallback(s.onCloseCmdCb)
 
-	sendButton := widget.NewButton("clear", func() {
+	sendButton := widget.NewButton(constant.HOME_SCREEN_ClearButton, func() {
 		s.clear()
 	})
 	input.OnSubmitted = func(tosend string) {
@@ -168,6 +185,13 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	s.clientName = widget.NewEntry()
 	s.clientName.Disable()
 
+	s.progressBar = widget.NewProgressBarInfinite()
+
+	s.progressBar.Stop()
+
+	s.progressBarPopUp = widget.NewModalPopUp(s.progressBar, s.appWindow.Canvas())
+	s.progressBarPopUp.Hide()
+
 	scan := widget.NewButton("", func() {
 
 		s.mqttScreen.scanScreen.Scan()
@@ -176,7 +200,7 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	scan.SetIcon(theme.SearchIcon())
 	icon := theme.MediaRecordIcon()
 
-	s.connectedText = widget.NewLabel("disconnected")
+	s.connectedText = widget.NewLabel(constant.HOME_SCREEN_Broker_Disconnected)
 	s.connectedIcon = widget.NewIcon(icon)
 	s.connectedIcon.SetResource(theme.ContentClearIcon())
 
@@ -197,7 +221,6 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	clearInput.SetIcon(theme.ContentClearIcon())
 
 	s.scroll = container.NewScroll(s.shell)
-	//s.scroll.SetMinSize(fyne.NewSize(32, 128))
 
 	cont := container.NewBorder(
 		container.NewBorder(nil, nil, nil, container.NewHBox(scan, s.connectedText, s.connectedIcon), s.clientName),
@@ -205,19 +228,11 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 		nil, nil,
 		s.scroll)
 
-	//  cont.Resize(fyne.NewSize(300, 300))
-
-	//input.OnChanged = func(cmd string) {
-	//	fmt.Println(cmd)
-	//}
-
 	s.container = cont
 	s.input = input
 	s.sendButton = sendButton
 
 	s.mqttScreen.scanScreen.SetCallbackClient(s.clientCb)
-
-	//s.shell.SetText(example)
 
 	return &s
 }
