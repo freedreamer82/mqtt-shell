@@ -24,23 +24,22 @@ func (p *blackRenderer) BackgroundColor() color.Color {
 }
 
 type MainScreen struct {
-	container        fyne.CanvasObject
-	sendButton       *widget.Button
-	input            *widget.Entry
-	isConnected      bool
-	cmdScreen        *CmdScreen
-	clientName       *widget.Entry
-	shell            *widget.TextGrid
-	mqttScreen       *MqttDialog
-	connectedText    *widget.Label
-	client           *mqtt.MqttClientChat
-	app              fyne.App
-	appWindow        fyne.Window
-	scroll           *container.Scroll
-	chanReadReady    chan bool
-	connectedIcon    *widget.Icon
-	progressBar      *widget.ProgressBarInfinite
-	progressBarPopUp *widget.PopUp
+	container     fyne.CanvasObject
+	sendButton    *widget.Button
+	input         *widget.Entry
+	isConnected   bool
+	cmdScreen     *CmdScreen
+	clientName    *widget.Entry
+	shell         *widget.TextGrid
+	mqttScreen    *MqttDialog
+	connectedText *widget.Label
+	client        *mqtt.MqttClientChat
+	app           fyne.App
+	appWindow     fyne.Window
+	scroll        *container.Scroll
+	chanReadReady chan bool
+	connectedIcon *widget.Icon
+	waitBar       *WaitBar
 }
 
 func (s *MainScreen) Read(p []byte) (n int, err error) {
@@ -73,9 +72,8 @@ const shellHistoryDepthLines = 30
 
 func (s *MainScreen) Write(p []byte) (n int, err error) {
 
-	if s.progressBar != nil && s.progressBarPopUp.Visible() {
-		s.progressBar.Stop()
-		s.progressBarPopUp.Hide()
+	if s.waitBar != nil && s.waitBar.Visible() {
+		s.waitBar.Hide()
 	}
 
 	toTrim := string(p)
@@ -133,10 +131,9 @@ func (s *MainScreen) clientCb(c string) {
 	}
 	s.client.Start()
 
-	if s.progressBar != nil && !s.progressBarPopUp.Visible() {
-		s.progressBar.Start()
-		s.progressBarPopUp.Resize(fyne.NewSize(s.appWindow.Canvas().Size().Width/2, s.appWindow.Canvas().Size().Height/20))
-		s.progressBarPopUp.Show()
+	if s.waitBar != nil && !s.waitBar.Visible() {
+		s.waitBar.Resize(fyne.NewSize(s.appWindow.Canvas().Size().Width/2, s.appWindow.Canvas().Size().Height/20))
+		s.waitBar.Show()
 	}
 
 }
@@ -185,12 +182,7 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	s.clientName = widget.NewEntry()
 	s.clientName.Disable()
 
-	s.progressBar = widget.NewProgressBarInfinite()
-
-	s.progressBar.Stop()
-
-	s.progressBarPopUp = widget.NewModalPopUp(s.progressBar, s.appWindow.Canvas())
-	s.progressBarPopUp.Hide()
+	s.waitBar = NewWaitBar(s.appWindow)
 
 	scan := widget.NewButton("", func() {
 

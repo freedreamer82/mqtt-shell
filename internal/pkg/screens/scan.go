@@ -24,6 +24,7 @@ type ScanScreen struct {
 	mqttOpts    *MQTT.ClientOptions
 	clientName  string
 	cb          OnClientChosen
+	waitBar     *WaitBar
 }
 
 func (s *ScanScreen) GetContainer() fyne.CanvasObject {
@@ -71,18 +72,13 @@ func (s *ScanScreen) Scan() {
 		}
 	}()
 
-	pb := widget.NewProgressBarInfinite()
-	pb.Show()
-	pop := widget.NewModalPopUp(pb, s.app.Canvas())
-	pop.Resize(fyne.NewSize(s.app.Canvas().Size().Width/2, s.app.Canvas().Size().Height/20))
-	pop.Show()
+	s.waitBar.Resize(fyne.NewSize(s.app.Canvas().Size().Width/2, s.app.Canvas().Size().Height/20))
+	s.waitBar.Show()
 
 	discovery.Run(clients)
 	quit <- true
 
-	pb.Refresh()
-	pb.Hide()
-	pop.Hide()
+	s.waitBar.Hide()
 	s.ShowPopUp()
 
 }
@@ -132,6 +128,8 @@ func (s *ScanScreen) ShowPopUp() {
 func NewScanOverlay(app fyne.Window, opt *MQTT.ClientOptions) *ScanScreen {
 
 	s := ScanScreen{mqttOpts: opt}
+
+	s.waitBar = NewWaitBar(app)
 	s.selectedCmd = -1
 	s.app = app
 
