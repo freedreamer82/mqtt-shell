@@ -40,6 +40,8 @@ type MainScreen struct {
 	chanReadReady chan bool
 	connectedIcon *widget.Icon
 	waitBar       *WaitBar
+	inputcmd      string
+	inputText     string
 }
 
 func (s *MainScreen) Read(p []byte) (n int, err error) {
@@ -95,6 +97,7 @@ func (s *MainScreen) Write(p []byte) (n int, err error) {
 		}
 	}
 
+	s.inputText = text
 	s.shell.SetText(text)
 	s.scroll.ScrollToBottom()
 
@@ -169,9 +172,15 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 		s.clear()
 	})
 	input.OnSubmitted = func(tosend string) {
-		s.Write([]byte(fmt.Sprintf("%s", tosend)))
+		//s.Write([]byte(fmt.Sprintf("%s", tosend)))
 		s.Write([]byte("\n"))
 		s.chanReadReady <- true
+	}
+
+	input.OnChanged = func(cmd string) {
+		s.inputcmd = cmd
+		s.shell.SetText(s.inputText + s.inputcmd)
+		s.shell.Refresh()
 	}
 
 	s.shell = widget.NewLabel("")
