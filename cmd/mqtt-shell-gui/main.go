@@ -14,7 +14,7 @@ func main() {
 	window := myApp.NewWindow(locale.AppWindowName)
 
 	window.CenterOnScreen()
-	//window.SetIcon(resourceLogoSvg)
+	window.SetIcon(resourceMqttShellMidResolutionPng)
 	window.Resize(fyne.NewSize(constant.MainWindowW, constant.MainWindowH))
 
 	app := screens.NewMainScreen(myApp, window)
