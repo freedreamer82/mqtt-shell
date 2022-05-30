@@ -30,7 +30,7 @@ type MainScreen struct {
 	isConnected   bool
 	cmdScreen     *CmdScreen
 	clientName    *widget.Entry
-	shell         *widget.TextGrid
+	shell         *widget.Label
 	mqttScreen    *MqttDialog
 	connectedText *widget.Label
 	client        *mqtt.MqttClientChat
@@ -68,7 +68,7 @@ func (s *MainScreen) Read(p []byte) (n int, err error) {
 	return 0, nil
 }
 
-const shellHistoryDepthLines = 30
+const shellHistoryDepthLines = 100
 
 func (s *MainScreen) Write(p []byte) (n int, err error) {
 
@@ -79,7 +79,7 @@ func (s *MainScreen) Write(p []byte) (n int, err error) {
 	toTrim := string(p)
 	trimmed := strings.Replace(toTrim, "\r\n", "\n", -1)
 
-	text := s.shell.Text() + trimmed
+	text := s.shell.Text + trimmed
 	lines := strings.Split(text, "\n")
 
 	startIdx := len(lines) - shellHistoryDepthLines
@@ -174,7 +174,7 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 		s.chanReadReady <- true
 	}
 
-	s.shell = widget.NewTextGrid()
+	s.shell = widget.NewLabel("")
 	r := s.createRenderer()
 	r.Refresh()
 	//s.shell.Disable()
@@ -225,6 +225,8 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	s.sendButton = sendButton
 
 	s.mqttScreen.scanScreen.SetCallbackClient(s.clientCb)
+
+	//fyne.CurrentDevice().IsMobile()
 
 	return &s
 }

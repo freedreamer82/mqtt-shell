@@ -16,7 +16,7 @@ type OnClientChosen func(c string)
 
 type ScanScreen struct {
 	container   fyne.CanvasObject
-	clients     []string
+	clients     []mqtt.Client
 	selectedCmd int
 	inputcmd    binding.String
 	listData    *widget.List
@@ -39,7 +39,7 @@ func (s *ScanScreen) GetClientName() string {
 	return s.clientName
 }
 
-func (s *ScanScreen) GetClients() []string {
+func (s *ScanScreen) GetClients() []mqtt.Client {
 	return s.clients
 }
 
@@ -50,7 +50,7 @@ func (s *ScanScreen) SetMqttOpts(opt *MQTT.ClientOptions) {
 func (s *ScanScreen) Scan() {
 
 	//clear clients list...
-	s.clients = []string{}
+	s.clients = []mqtt.Client{}
 	discovery := mqtt.NewBeaconDiscovery(s.mqttOpts, config.BeaconRequestTopic, config.BeaconReplyTopic, 5,
 		config.BeaconConverter)
 
@@ -63,7 +63,7 @@ func (s *ScanScreen) Scan() {
 			case client := <-clients:
 				//fmt.Printf("Ip: %15s - Id: %20s - Version: %10s - Time: %s - Uptime: %s \r\n", client.Ip,
 				//	client.Id, client.Version, client.Time, client.Uptime)
-				s.clients = append(s.clients, client.Id)
+				s.clients = append(s.clients, client)
 			case <-quit:
 				fmt.Printf("End Scan...")
 				return
@@ -92,7 +92,7 @@ func (s *ScanScreen) ShowPopUp() {
 
 	okButton := widget.NewButton("OK", func() {
 		s.container.Hide()
-		s.clientName = s.clients[s.selectedCmd]
+		s.clientName = s.clients[s.selectedCmd].Id
 		if s.cb != nil {
 			s.cb(s.clientName)
 		}
@@ -104,10 +104,12 @@ func (s *ScanScreen) ShowPopUp() {
 			return len(s.clients)
 		},
 		func() fyne.CanvasObject {
-			return container.NewHBox(widget.NewLabel(""), layout.NewSpacer())
+			return container.NewHBox(widget.NewLabel(""), layout.NewSpacer(), widget.NewLabel(""), widget.NewLabel(""))
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
-			item.(*fyne.Container).Objects[0].(*widget.Label).SetText(s.clients[id])
+			item.(*fyne.Container).Objects[0].(*widget.Label).SetText(s.clients[id].Id)
+			item.(*fyne.Container).Objects[2].(*widget.Label).SetText(s.clients[id].Ip)
+			item.(*fyne.Container).Objects[3].(*widget.Label).SetText(s.clients[id].Version)
 		},
 	)
 	s.listData.OnSelected = func(id widget.ListItemID) {
