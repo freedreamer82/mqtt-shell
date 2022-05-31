@@ -74,7 +74,8 @@ func main() {
 
 	if conf.Mode == "server" {
 		log.Info("Starting server..")
-		chat := mqtt.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, constant.VERSION, mqtt.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
+		chat := mqtt.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, constant.VERSION,
+			mqtt.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
 		chat.Start()
 	} else if conf.Mode == "client" {
 
@@ -84,7 +85,8 @@ func main() {
 	} else if conf.Mode == "beacon" {
 
 		log.Info("Starting beacon discovery..")
-		discovery := mqtt.NewBeaconDiscovery(&mqttOpts, conf.BeaconRequestTopic, conf.BeaconResponseTopic, conf.TimeoutBeaconSec,
+		discovery := mqtt.NewBeaconDiscovery(&mqttOpts, conf.BeaconRequestTopic,
+			conf.BeaconResponseTopic, conf.TimeoutBeaconSec,
 			config.BeaconConverter)
 		discovery.Run(nil)
 		return
