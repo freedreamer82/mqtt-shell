@@ -56,9 +56,7 @@ func NewBeaconDiscovery(mqttOpts *MQTT.ClientOptions,
 	b := BeaconDiscovery{mqttOpts: mqttOpts, cb: nil,
 		beaconRequestTopic: beaconRequestTopic, beaconResponseTopic: beaconResponseTopic, timeout: timeout, converter: converter, timerCheckEnabled: true}
 
-	if b.mqttOpts.ClientID == "" {
-		b.mqttOpts.SetClientID(getRandomClientId())
-	}
+	b.mqttOpts.SetClientID(getRandomClientId())
 
 	b.closeChan = make(chan bool)
 
@@ -104,7 +102,6 @@ func (b *BeaconDiscovery) Run(ch chan Client) {
 			b.mqttClient.Disconnect(100)
 		}
 	}
-
 }
 
 func (b *BeaconDiscovery) onBrokerConnect(client MQTT.Client) {

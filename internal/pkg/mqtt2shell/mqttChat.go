@@ -122,6 +122,27 @@ func (m *MqttChat) subscribeMessagesToBroker() error {
 	return nil
 }
 
+func (m *MqttChat) unsubscribeMessagesToBroker() error {
+	client := m.mqttClient
+	if m.rxTopic != "" {
+		// Go For MQTT Publish
+		log.Printf("UnSub topic %s, Qos: %d\r\n", m.rxTopic, 0)
+		if token := client.Unsubscribe(m.rxTopic); token.Error() != nil {
+			// Return Error
+			return token.Error()
+		}
+	}
+	if m.beaconRequestTopic != "" {
+		// Go For MQTT Publish
+		log.Printf("UnSub topic %s, Qos: %d\r\n", m.beaconRequestTopic, 0)
+		if token := client.Unsubscribe(m.beaconRequestTopic); token.Error() != nil {
+			// Return Error
+			return token.Error()
+		}
+	}
+	return nil
+}
+
 func (m *MqttChat) Transmit(out string, uuid string) {
 
 	if uuid == "" {
@@ -312,6 +333,7 @@ func (m *MqttChat) IsRunning() bool {
 }
 
 func (m *MqttChat) Stop() {
+	m.unsubscribeMessagesToBroker()
 	m.isRunning = false
 	m.brokerStartConnectTimerEnable = false
 }

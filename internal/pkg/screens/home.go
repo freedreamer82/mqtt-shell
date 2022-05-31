@@ -119,6 +119,11 @@ func (s *MainScreen) clientCb(c string) {
 	txTopic := fmt.Sprintf(config.TemplateSubTopic, c)
 	rxTopic := fmt.Sprintf(config.TemplateSubTopicreply, c)
 
+	if s.client != nil && s.client.IsRunning() {
+		s.client.Stop()
+		s.client = nil
+	}
+
 	if s.client == nil {
 		c := struct {
 			io.Reader
@@ -126,12 +131,8 @@ func (s *MainScreen) clientCb(c string) {
 		}{s, s}
 
 		s.client = mqtt.NewClientChatWithCustomIO(s.mqttScreen.mqttOpts, rxTopic, txTopic, constant.VERSION, c)
-
 	}
 
-	if s.client.IsRunning() {
-		s.client.Stop()
-	}
 	s.client.Start()
 
 	if s.waitBar != nil && !s.waitBar.Visible() {
