@@ -1,7 +1,7 @@
 package constant
 
 const INFO = "mqtt-shell\r\nSw Engineer: Marco Garzola"
-const VERSION = "0.0.5"
+const VERSION = "0.0.6"
 const APP_ID = "com.mqtt-shell"
 const MainWindowW = 800
 const MainWindowH = 450
