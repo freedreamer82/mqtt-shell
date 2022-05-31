@@ -131,8 +131,11 @@ func (s *CmdScreen) ShowPopUp() {
 		container.NewScroll(s.listData))
 
 	s.container = widget.NewModalPopUp(c, s.app.Canvas())
-
-	s.container.Resize(fyne.NewSize(s.app.Canvas().Size().Width/2, s.app.Canvas().Size().Height/2))
+	w := s.app.Canvas().Size().Width / 2
+	if fyne.CurrentDevice().IsMobile() {
+		w = s.app.Canvas().Size().Width
+	}
+	s.container.Resize(fyne.NewSize(w, s.app.Canvas().Size().Height/2))
 	s.container.Show()
 }
 
