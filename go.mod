@@ -9,7 +9,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/eclipse/paho.mqtt.golang v1.3.5
 	github.com/fsnotify/fsnotify v1.5.4 // indirect
-	github.com/fyne-io/fyne-cross v1.2.1 // indirect
+	github.com/fyne-io/fyne-cross v1.2.2-0.20220519162753-afe93aebfdc5 // indirect
 	github.com/fyne-io/gl-js v0.0.0-20220516203408-b35fbccb7063 // indirect
 	github.com/fyne-io/glfw-js v0.0.0-20220517201726-bebc2019cd33 // indirect
 	github.com/go-gl/gl v0.0.0-20211210172815-726fda9656d6 // indirect
@@ -33,7 +33,6 @@ require (
 	github.com/subosito/gotenv v1.3.0 // indirect
 	github.com/yuin/goldmark v1.4.12 // indirect
 	golang.org/x/image v0.0.0-20220413100746-70e8d0d3baa9 // indirect
-	golang.org/x/mobile v0.0.0-20220518205345-8578da9835fd // indirect
 	golang.org/x/net v0.0.0-20220526153639-5463443f8c37 // indirect
 	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
 	gopkg.in/ini.v1 v1.66.6 // indirect
