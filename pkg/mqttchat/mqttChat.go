@@ -1,4 +1,4 @@
-package mqtt
+package mqttchat
 
 import (
 	"encoding/base64"

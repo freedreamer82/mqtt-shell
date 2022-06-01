@@ -2,6 +2,7 @@ package screens
 
 import (
 	"fmt"
+	mqtt "github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 	"image/color"
 	"io"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
-	mqtt "github.com/freedreamer82/mqtt-shell/internal/pkg/mqtt2shell"
 )
 
 type blackRenderer struct {

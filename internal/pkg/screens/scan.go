@@ -9,7 +9,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
-	mqtt "github.com/freedreamer82/mqtt-shell/internal/pkg/mqtt2shell"
+	mqtt "github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 )
 
 type OnClientChosen func(c string)

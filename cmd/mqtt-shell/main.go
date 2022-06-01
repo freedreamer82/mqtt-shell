@@ -8,11 +8,10 @@ import (
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/locale"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/screens"
+	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/logging"
-
-	mqtt "github.com/freedreamer82/mqtt-shell/internal/pkg/mqtt2shell"
 
 	"github.com/alecthomas/kong"
 	MQTT "github.com/eclipse/paho.mqtt.golang"
@@ -100,17 +99,17 @@ func main() {
 
 	if conf.Mode == "server" {
 		log.Info("Starting server..")
-		chat := mqtt.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, constant.VERSION, mqtt.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
+		chat := mqttchat.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, constant.VERSION, mqttchat.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
 		chat.Start()
 	} else if conf.Mode == "client" {
 
 		log.Info("Starting client..")
-		chat := mqtt.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, constant.VERSION)
+		chat := mqttchat.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, constant.VERSION)
 		chat.Start()
 	} else if conf.Mode == "beacon" {
 
 		log.Info("Starting beacon discovery..")
-		discovery := mqtt.NewBeaconDiscovery(&mqttOpts, conf.BeaconRequestTopic, conf.BeaconResponseTopic, conf.TimeoutBeaconSec,
+		discovery := mqttchat.NewBeaconDiscovery(&mqttOpts, conf.BeaconRequestTopic, conf.BeaconResponseTopic, conf.TimeoutBeaconSec,
 			config.BeaconConverter)
 		discovery.Run(nil)
 		return

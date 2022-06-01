@@ -1,4 +1,4 @@
-package mqtt
+package mqttchat
 
 import (
 	"encoding/json"
@@ -34,7 +34,7 @@ type BeaconDiscovery struct {
 type BeaconDiscoveryOption func(*BeaconDiscovery)
 type NodeIdFromTopic func(string) string
 
-func WithDiscoveryConnectionCallaback(cb ConnectionCallback) BeaconDiscoveryOption {
+func WithDiscoveryConnectionCallback(cb ConnectionCallback) BeaconDiscoveryOption {
 	return func(h *BeaconDiscovery) {
 		h.cb = cb
 	}
