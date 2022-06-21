@@ -1,4 +1,4 @@
-package mqtt
+package mqttchat
 
 import (
 	"fmt"
@@ -15,7 +15,7 @@ type MqttServerChat struct {
 
 func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 
-	if data.Uuid == "" || data.Cmd == "" || data.Data == "" {
+	if data.CmdUUID == "" || data.Cmd == "" || data.Data == "" {
 		return
 	}
 
@@ -28,7 +28,7 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 		} else {
 			fmt.Println(out)
 		}
-		m.Transmit(out, data.Uuid)
+		m.Transmit(out, data.CmdUUID, data.ClientUUID)
 	}
 
 }

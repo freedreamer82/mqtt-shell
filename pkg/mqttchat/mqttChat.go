@@ -1,4 +1,4 @@
-package mqtt
+package mqttchat
 
 import (
 	"encoding/base64"
@@ -22,32 +22,47 @@ type SubScribeMessage struct {
 	Qos   byte
 }
 
+type ConnectionStatus string
+
+const ConnectionStatus_Connected = "connected"
+const ConnectionStatus_Disconnected = "disconnected"
+
+type ConnectionCallback func(status ConnectionStatus)
+
 type MqttJsonData struct {
-	Ip       string `json:"ip"`
-	Version  string `json:"version"`
-	Cmd      string `json:"cmd"`
-	Data     string `json:"data"`
-	Uuid     string `json:"uuid"`
-	Datetime string `json:"datetime"`
+	Ip         string `json:"ip"`
+	Version    string `json:"version"`
+	Cmd        string `json:"cmd"`
+	Data       string `json:"data"`
+	CmdUUID    string `json:"cmduuid"`
+	ClientUUID string `json:"clientuuid"`
+	Datetime   string `json:"datetime"`
 }
 
-type OnDataCallack func(data MqttJsonData)
+type OnDataCallback func(data MqttJsonData)
 
 type MqttChat struct {
-	mqttClient         MQTT.Client
-	mqttOpts           *MQTT.ClientOptions
-	timeoutCmdShell    time.Duration
-	Cb                 OnDataCallack
-	txTopic            string
-	rxTopic            string
-	beaconTopic        string
-	beaconRequestTopic string
-	version            string
-	startTime          time.Time
+	mqttClient                    MQTT.Client
+	mqttOpts                      *MQTT.ClientOptions
+	timeoutCmdShell               time.Duration
+	Cb                            OnDataCallback
+	txTopic                       string
+	rxTopic                       string
+	beaconTopic                   string
+	beaconRequestTopic            string
+	version                       string
+	startTime                     time.Time
+	connCb                        ConnectionCallback
+	brokerStartConnectTimerEnable bool
+	isRunning                     bool
 }
 
-func (m *MqttChat) SetDataCallback(cb OnDataCallack) {
+func (m *MqttChat) SetDataCallback(cb OnDataCallback) {
 	m.Cb = cb
+}
+
+func (m *MqttChat) GetMqttClient() MQTT.Client {
+	return m.mqttClient
 }
 
 func (m *MqttChat) getIpAddress() string {
@@ -108,16 +123,37 @@ func (m *MqttChat) subscribeMessagesToBroker() error {
 	return nil
 }
 
-func (m *MqttChat) Transmit(out string, uuid string) {
+func (m *MqttChat) unsubscribeMessagesToBroker() error {
+	client := m.mqttClient
+	if m.rxTopic != "" {
+		// Go For MQTT Publish
+		log.Printf("UnSub topic %s, Qos: %d\r\n", m.rxTopic, 0)
+		if token := client.Unsubscribe(m.rxTopic); token.Error() != nil {
+			// Return Error
+			return token.Error()
+		}
+	}
+	if m.beaconRequestTopic != "" {
+		// Go For MQTT Publish
+		log.Printf("UnSub topic %s, Qos: %d\r\n", m.beaconRequestTopic, 0)
+		if token := client.Unsubscribe(m.beaconRequestTopic); token.Error() != nil {
+			// Return Error
+			return token.Error()
+		}
+	}
+	return nil
+}
 
-	if uuid == "" {
+func (m *MqttChat) Transmit(out string, cmdUuid string, clientUuid string) {
+
+	if cmdUuid == "" {
 		//generate one random..
-		uuid = shortuuid.New()
+		cmdUuid = shortuuid.New()
 	}
 
 	go func() {
 		now := time.Now().String()
-		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, Uuid: uuid}
+		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, CmdUUID: cmdUuid, ClientUUID: clientUuid}
 
 		b, err := json.Marshal(reply)
 		if err != nil {
@@ -171,7 +207,7 @@ func (m *MqttChat) sendBeacon() {
 	if m.beaconTopic != "" {
 		now := time.Now().String()
 		fromNow := m.uptime().String()
-		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Uuid: "", Data: fromNow}
+		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Data: fromNow}
 
 		b, err := json.Marshal(reply)
 		if err != nil {
@@ -183,13 +219,21 @@ func (m *MqttChat) sendBeacon() {
 }
 
 func (m *MqttChat) onBrokerConnect(client MQTT.Client) {
+
+	if m.connCb != nil {
+		m.connCb(ConnectionStatus_Connected)
+	}
+
 	log.Debug("BROKER connected!")
 	m.subscribeMessagesToBroker()
 	m.sendBeacon()
 }
 
 func (m *MqttChat) onBrokerDisconnect(client MQTT.Client, err error) {
-	log.Debug("BROKER disconnecred !", err)
+	if m.connCb != nil {
+		m.connCb(ConnectionStatus_Disconnected)
+	}
+	log.Debug("BROKER disconnected !", err)
 }
 
 func (m *MqttChat) setupMQTT() {
@@ -204,8 +248,10 @@ func (m *MqttChat) setupMQTT() {
 	m.mqttOpts.SetConnectionLostHandler(m.onBrokerDisconnect)
 	m.mqttOpts.SetOnConnectHandler(m.onBrokerConnect)
 
-	client := MQTT.NewClient(m.mqttOpts)
-	m.mqttClient = client
+	if m.mqttClient == nil {
+		client := MQTT.NewClient(m.mqttOpts)
+		m.mqttClient = client
+	}
 	m.brokerStartConnect()
 }
 
@@ -220,9 +266,12 @@ func (m *MqttChat) brokerStartConnect() {
 		for {
 			select {
 			case <-retry.C:
-				if !m.mqttClient.IsConnected() {
-					if token := m.mqttClient.Connect(); token.Wait() && token.Error() != nil {
-						log.Info("failed connection to broker retrying...")
+
+				if m.brokerStartConnectTimerEnable {
+					if !m.mqttClient.IsConnected() {
+						if token := m.mqttClient.Connect(); token.Wait() && token.Error() != nil {
+							log.Info("failed connection to broker retrying...")
+						}
 					} else {
 						return
 					}
@@ -242,6 +291,18 @@ func WithOptionTimeoutCmd(timeout time.Duration) MqttChatOption {
 	}
 }
 
+func WithOptionConnectionCallaback(cb ConnectionCallback) MqttChatOption {
+	return func(h *MqttChat) {
+		h.connCb = cb
+	}
+}
+
+//func WithOptionMqttClient(client MQTT.Client) MqttChatOption {
+//	return func(h *MqttChat) {
+//		h.mqttClient = client
+//	}
+//}
+
 func (m *MqttChat) uptime() time.Duration {
 	return time.Since(m.startTime)
 }
@@ -249,7 +310,8 @@ func (m *MqttChat) uptime() time.Duration {
 func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, version string, opts ...MqttChatOption) *MqttChat {
 	rand.Seed(time.Now().UnixNano())
 
-	m := MqttChat{mqttOpts: mqttOpts, rxTopic: rxTopic, txTopic: txtopic, version: version, beaconTopic: "", Cb: nil}
+	m := MqttChat{mqttOpts: mqttOpts, rxTopic: rxTopic, txTopic: txtopic, version: version,
+		beaconTopic: "", Cb: nil, connCb: nil, brokerStartConnectTimerEnable: true, isRunning: false}
 
 	m.startTime = time.Now()
 	m.timeoutCmdShell = defaultTimeoutCmd
@@ -259,7 +321,20 @@ func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, versi
 		opt(&m)
 	}
 
-	m.setupMQTT()
-
 	return &m
+}
+
+func (m *MqttChat) Start() {
+	m.isRunning = true
+	m.setupMQTT()
+}
+
+func (m *MqttChat) IsRunning() bool {
+	return m.isRunning
+}
+
+func (m *MqttChat) Stop() {
+	m.unsubscribeMessagesToBroker()
+	m.isRunning = false
+	m.brokerStartConnectTimerEnable = false
 }
