@@ -3,6 +3,7 @@ package mqttchat
 import (
 	"bufio"
 	"fmt"
+	"github.com/lithammer/shortuuid/v3"
 	"io"
 	"os"
 	"strings"
@@ -13,13 +14,14 @@ import (
 )
 
 const prompt = ">"
-const login = "-------------------------------------------------\r\n|  Mqtt-shell client \r\n|\r\n|  IP: %s \r\n|  SERVER VER: %s - CLIENT VER: %s\r\n|  TX: %s\r\n|  RX: %s\r\n|\r\n-------------------------------------------------\r\n"
+const login = "-------------------------------------------------\r\n|  Mqtt-shell client \r\n|\r\n|  IP: %s \r\n|  SERVER VER: %s - CLIENT VER: %s\r\n|  CLIENT UUID: %s\r\n|  TX: %s\r\n|  RX: %s\r\n|\r\n-------------------------------------------------\r\n"
 
 type MqttClientChat struct {
 	*MqttChat
 	waitServerChan chan bool
 	ch             chan []byte
 	io             ClientChatIO
+	uuid           string
 }
 
 func (m *MqttClientChat) print(a ...interface{}) (n int, err error) {
@@ -38,9 +40,13 @@ func (m *MqttClientChat) printWithoutLn(a ...interface{}) (n int, err error) {
 	return fmt.Fprint(m.io.Writer, a...)
 }
 
+func (m *MqttClientChat) IsDataInvalid(data MqttJsonData) bool {
+	return data.CmdUUID == "" || data.Cmd == "" || data.Data == "" || data.ClientUUID != m.uuid
+}
+
 func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 
-	if data.Uuid == "" || data.Cmd == "" || data.Data == "" {
+	if m.IsDataInvalid(data) {
 		return
 	}
 	out := strings.TrimSuffix(data.Data, "\n") // remove newline
@@ -51,7 +57,8 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 
 func (m *MqttClientChat) waitServerCb(data MqttJsonData) {
 
-	if data.Uuid == "" || data.Cmd != "shell" || data.Data == "" {
+	if m.IsDataInvalid(data) {
+		log.Debug()
 		return
 	}
 	m.waitServerChan <- true
@@ -66,7 +73,7 @@ func (m *MqttClientChat) printPrompt() {
 
 func (m *MqttClientChat) printLogin(ip string, serverVersion string) {
 	log.Info("Connected")
-	m.printf(login, ip, serverVersion, m.version, m.txTopic, m.rxTopic)
+	m.printf(login, ip, serverVersion, m.version, m.uuid, m.txTopic, m.rxTopic)
 	m.printPrompt()
 }
 
@@ -74,7 +81,7 @@ func (m *MqttClientChat) waitServer() {
 	m.SetDataCallback(m.waitServerCb)
 	for {
 		log.Info("Connecting to server...")
-		m.Transmit("whoami", "")
+		m.Transmit("whoami", "", m.uuid)
 		select {
 		case ok := <-m.waitServerChan:
 			if ok {
@@ -97,7 +104,7 @@ func (m *MqttClientChat) clientTask() {
 			if line == "" {
 				m.printPrompt()
 			} else {
-				m.Transmit(line, "")
+				m.Transmit(line, "", m.uuid)
 			}
 		}
 	}
@@ -118,7 +125,7 @@ func defaultIO() ClientChatIO {
 func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string,
 	version string, opts ...MqttChatOption) *MqttClientChat {
 
-	cc := MqttClientChat{io: defaultIO()}
+	cc := MqttClientChat{io: defaultIO(), uuid: shortuuid.New()}
 	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
 	chat.SetDataCallback(cc.OnDataRx)
 	cc.MqttChat = chat
@@ -131,7 +138,7 @@ func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string,
 func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string,
 	customIO ClientChatIO, opts ...MqttChatOption) *MqttClientChat {
 
-	cc := MqttClientChat{io: customIO}
+	cc := MqttClientChat{io: customIO, uuid: shortuuid.New()}
 	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
 	chat.SetDataCallback(cc.OnDataRx)
 	cc.MqttChat = chat

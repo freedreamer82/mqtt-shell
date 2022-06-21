@@ -78,6 +78,7 @@ func main() {
 
 	if conf.Mode == "gui" {
 		rungui()
+		return
 	}
 
 	if conf.Broker == "" {

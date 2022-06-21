@@ -30,21 +30,22 @@ const ConnectionStatus_Disconnected = "disconnected"
 type ConnectionCallback func(status ConnectionStatus)
 
 type MqttJsonData struct {
-	Ip       string `json:"ip"`
-	Version  string `json:"version"`
-	Cmd      string `json:"cmd"`
-	Data     string `json:"data"`
-	Uuid     string `json:"uuid"`
-	Datetime string `json:"datetime"`
+	Ip         string `json:"ip"`
+	Version    string `json:"version"`
+	Cmd        string `json:"cmd"`
+	Data       string `json:"data"`
+	CmdUUID    string `json:"cmduuid"`
+	ClientUUID string `json:"clientuuid"`
+	Datetime   string `json:"datetime"`
 }
 
-type OnDataCallack func(data MqttJsonData)
+type OnDataCallback func(data MqttJsonData)
 
 type MqttChat struct {
 	mqttClient                    MQTT.Client
 	mqttOpts                      *MQTT.ClientOptions
 	timeoutCmdShell               time.Duration
-	Cb                            OnDataCallack
+	Cb                            OnDataCallback
 	txTopic                       string
 	rxTopic                       string
 	beaconTopic                   string
@@ -56,7 +57,7 @@ type MqttChat struct {
 	isRunning                     bool
 }
 
-func (m *MqttChat) SetDataCallback(cb OnDataCallack) {
+func (m *MqttChat) SetDataCallback(cb OnDataCallback) {
 	m.Cb = cb
 }
 
@@ -143,16 +144,16 @@ func (m *MqttChat) unsubscribeMessagesToBroker() error {
 	return nil
 }
 
-func (m *MqttChat) Transmit(out string, uuid string) {
+func (m *MqttChat) Transmit(out string, cmdUuid string, clientUuid string) {
 
-	if uuid == "" {
+	if cmdUuid == "" {
 		//generate one random..
-		uuid = shortuuid.New()
+		cmdUuid = shortuuid.New()
 	}
 
 	go func() {
 		now := time.Now().String()
-		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, Uuid: uuid}
+		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, CmdUUID: cmdUuid, ClientUUID: clientUuid}
 
 		b, err := json.Marshal(reply)
 		if err != nil {
@@ -206,7 +207,7 @@ func (m *MqttChat) sendBeacon() {
 	if m.beaconTopic != "" {
 		now := time.Now().String()
 		fromNow := m.uptime().String()
-		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Uuid: "", Data: fromNow}
+		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Data: fromNow}
 
 		b, err := json.Marshal(reply)
 		if err != nil {

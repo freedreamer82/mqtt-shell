@@ -7,28 +7,36 @@ mqtt-shell is a go tool to connect to a remote shell via mqtt. It includes:
  - mqtt-shell client ( go tool to connect to a server )
  - mqtt-shell beacon discovery ( go tool to find all mqtt-shell severs connected to the broker )
 
+It also includes a gui that implement client and beacon discovery features.
+Gui is available for linux windows mac and also for mobile ios and android
+
+<img src="demo/ios-screen-wait.jpeg" alt="drawing" width="200"/>
+<img src="demo/ios-screen-connection.jpeg" alt="drawing" width="200"/>
+<img src="demo/ios-screen-command.jpeg" alt="drawing" width="200"/>
 
 ### Installation
-Install the dependencies and build.
-
+Install the dependencies and build [ linux windows and android ]
 ```sh
 $ go get
-$ cd  cmd/mqtt-shell/
-$ go build
+$ ./compile.sh
+```
+Install the dependencies and build [ ios ]
+```sh
+$ go get
+$ cd cmd/mqtt-shell-gui
+$ fyne package -os ios -appID com.mqtt.shell -icon ../../assets/mqtt-shell.png -name mqtt-shell
 ```
 
 ### Start mqtt-shell sever
 after build
 
 ```sh
-$ cd  cmd/mqtt-shell/
 $ ./mqtt-shell -b <mqttbroker> -u <user> -P <password>  -p <mqttbrokerport> -m server -i <id>
 ```
 
 or
 
 ```sh
-$ cd  cmd/mqtt-shell/
 $ ./mqtt-shell -c <conf.toml>
 
 
@@ -41,19 +49,24 @@ Mode="server"
 Id=<id>
 ```
 
-### Start mqtt-shell client
+### Start mqtt-shell client (command line)
 after build
 
 ```sh
-$ cd  cmd/mqtt-shell/
 $ ./mqtt-shell -b <mqttbroker> -u <user> -P <password>  -p <mqttbrokerport> -m client -i <serverid>
+```
+
+### Start mqtt-shell client (gui)
+after build
+
+```sh
+$ ./mqtt-shell -m gui 
 ```
 
 ### Start mqtt-shell beacon discovery
 after build
 
 ```sh
-$ cd  cmd/mqtt-shell/
 $ ./mqtt-shell -b <mqttbroker> -u <user> -P <password>  -p <mqttbrokerport> -m beacon
 ```
 
