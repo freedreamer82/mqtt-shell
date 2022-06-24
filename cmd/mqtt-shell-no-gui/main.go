@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
+	"github.com/freedreamer82/mqtt-shell/pkg/info"
 	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
@@ -28,7 +28,7 @@ func main() {
 			Compact: true,
 		}),
 		kong.Vars{
-			"version": constant.INFO + " - " + constant.VERSION,
+			"version": info.INFO + " - " + info.VERSION,
 		})
 
 	v := viper.New()
@@ -73,13 +73,13 @@ func main() {
 
 	if conf.Mode == "server" {
 		log.Info("Starting server..")
-		chat := mqttchat.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, constant.VERSION,
+		chat := mqttchat.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, info.VERSION,
 			mqttchat.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
 		chat.Start()
 	} else if conf.Mode == "client" {
 
 		log.Info("Starting client..")
-		chat := mqttchat.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, constant.VERSION)
+		chat := mqttchat.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, info.VERSION)
 		chat.Start()
 	} else if conf.Mode == "beacon" {
 

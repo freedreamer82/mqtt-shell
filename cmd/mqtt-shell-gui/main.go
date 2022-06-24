@@ -7,11 +7,12 @@ import (
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/locale"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/screens"
+	"github.com/freedreamer82/mqtt-shell/pkg/info"
 )
 
 func main() {
 
-	myApp := app.NewWithID(constant.APP_ID)
+	myApp := app.NewWithID(info.APP_ID)
 	window := myApp.NewWindow(locale.AppWindowName)
 
 	window.CenterOnScreen()
