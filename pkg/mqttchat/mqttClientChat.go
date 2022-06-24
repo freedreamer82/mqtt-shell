@@ -129,6 +129,7 @@ func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string,
 	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
 	chat.SetDataCallback(cc.OnDataRx)
 	cc.MqttChat = chat
+	chat.mqttOpts.SetOrderMatters(true)
 	cc.waitServerChan = make(chan bool)
 	go cc.clientTask()
 

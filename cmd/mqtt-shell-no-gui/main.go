@@ -60,7 +60,7 @@ func main() {
 	}
 
 	brokerurl := conf.Broker
-	var mqttOpts MQTT.ClientOptions
+	var mqttOpts = MQTT.NewClientOptions()
 	addr := fmt.Sprintf("tcp://%s:%d", brokerurl, conf.BrokerPort)
 	log.Info("Connecting to : " + addr)
 	mqttOpts.AddBroker(addr)
@@ -73,18 +73,18 @@ func main() {
 
 	if conf.Mode == "server" {
 		log.Info("Starting server..")
-		chat := mqttchat.NewServerChat(&mqttOpts, conf.RxTopic, conf.TxTopic, info.VERSION,
+		chat := mqttchat.NewServerChat(mqttOpts, conf.RxTopic, conf.TxTopic, info.VERSION,
 			mqttchat.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
 		chat.Start()
 	} else if conf.Mode == "client" {
 
 		log.Info("Starting client..")
-		chat := mqttchat.NewClientChat(&mqttOpts, conf.TxTopic, conf.RxTopic, info.VERSION)
+		chat := mqttchat.NewClientChat(mqttOpts, conf.TxTopic, conf.RxTopic, info.VERSION)
 		chat.Start()
 	} else if conf.Mode == "beacon" {
 
 		log.Info("Starting beacon discovery..")
-		discovery := mqttchat.NewBeaconDiscovery(&mqttOpts, conf.BeaconRequestTopic,
+		discovery := mqttchat.NewBeaconDiscovery(mqttOpts, conf.BeaconRequestTopic,
 			conf.BeaconResponseTopic, conf.TimeoutBeaconSec,
 			config.BeaconConverter)
 		discovery.Run(nil)
