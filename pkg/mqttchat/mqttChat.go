@@ -17,6 +17,8 @@ import (
 const MaxClientIdLen = 14
 const defaultTimeoutCmd = 5 * time.Second
 
+const mqttQOS = 1
+
 type SubScribeMessage struct {
 	Topic string
 	Qos   byte
@@ -107,7 +109,7 @@ func (m *MqttChat) subscribeMessagesToBroker() error {
 	if m.rxTopic != "" {
 		// Go For MQTT Publish
 		log.Infof("Sub topic %s, Qos: %d", m.rxTopic, 0)
-		if token := client.Subscribe(m.rxTopic, 0, m.onBrokerData); token.Error() != nil {
+		if token := client.Subscribe(m.rxTopic, mqttQOS, m.onBrokerData); token.Error() != nil {
 			// Return Error
 			return token.Error()
 		}
@@ -115,7 +117,7 @@ func (m *MqttChat) subscribeMessagesToBroker() error {
 	if m.beaconRequestTopic != "" {
 		// Go For MQTT Publish
 		log.Infof("Sub topic %s, Qos: %d", m.beaconRequestTopic, 0)
-		if token := client.Subscribe(m.beaconRequestTopic, 0, m.onBeaconRequest); token.Error() != nil {
+		if token := client.Subscribe(m.beaconRequestTopic, mqttQOS, m.onBeaconRequest); token.Error() != nil {
 			// Return Error
 			return token.Error()
 		}
@@ -161,7 +163,7 @@ func (m *MqttChat) Transmit(out string, cmdUuid string, clientUuid string) {
 	}
 
 	encodedString := base64.StdEncoding.EncodeToString(b)
-	m.mqttClient.Publish(m.txTopic, 0, false, encodedString)
+	m.mqttClient.Publish(m.txTopic, mqttQOS, false, encodedString)
 
 }
 
@@ -211,7 +213,7 @@ func (m *MqttChat) sendBeacon() {
 			fmt.Println(err)
 			return
 		}
-		m.mqttClient.Publish(m.beaconTopic, 0, false, b)
+		m.mqttClient.Publish(m.beaconTopic, mqttQOS, false, b)
 	}
 }
 
