@@ -2,6 +2,7 @@ package screens
 
 import (
 	"fmt"
+	"github.com/freedreamer82/mqtt-shell/pkg/info"
 	mqtt "github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 	"image/color"
 	"io"
@@ -130,7 +131,7 @@ func (s *MainScreen) clientCb(c string) {
 			io.Writer
 		}{s, s}
 
-		s.client = mqtt.NewClientChatWithCustomIO(s.mqttScreen.mqttOpts, rxTopic, txTopic, constant.VERSION, c)
+		s.client = mqtt.NewClientChatWithCustomIO(s.mqttScreen.mqttOpts, rxTopic, txTopic, info.VERSION, c)
 	}
 
 	s.client.Start()
