@@ -108,7 +108,7 @@ func (m *MqttChat) subscribeMessagesToBroker() error {
 	client := m.mqttClient
 	if m.rxTopic != "" {
 		// Go For MQTT Publish
-		log.Infof("Sub topic %s, Qos: %d", m.rxTopic, 0)
+		log.Infof("Sub topic %s, Qos: %d", m.rxTopic, mqttQOS)
 		if token := client.Subscribe(m.rxTopic, mqttQOS, m.onBrokerData); token.Error() != nil {
 			// Return Error
 			return token.Error()
@@ -116,7 +116,7 @@ func (m *MqttChat) subscribeMessagesToBroker() error {
 	}
 	if m.beaconRequestTopic != "" {
 		// Go For MQTT Publish
-		log.Infof("Sub topic %s, Qos: %d", m.beaconRequestTopic, 0)
+		log.Infof("Sub topic %s, Qos: %d", m.beaconRequestTopic, mqttQOS)
 		if token := client.Subscribe(m.beaconRequestTopic, mqttQOS, m.onBeaconRequest); token.Error() != nil {
 			// Return Error
 			return token.Error()
@@ -129,7 +129,7 @@ func (m *MqttChat) unsubscribeMessagesToBroker() error {
 	client := m.mqttClient
 	if m.rxTopic != "" {
 		// Go For MQTT Publish
-		log.Infof("UnSub topic %s, Qos: %d", m.rxTopic, 0)
+		log.Infof("UnSub topic %s, Qos: %d", m.rxTopic, mqttQOS)
 		if token := client.Unsubscribe(m.rxTopic); token.Error() != nil {
 			// Return Error
 			return token.Error()
@@ -137,7 +137,7 @@ func (m *MqttChat) unsubscribeMessagesToBroker() error {
 	}
 	if m.beaconRequestTopic != "" {
 		// Go For MQTT Publish
-		log.Infof("UnSub topic %s, Qos: %d", m.beaconRequestTopic, 0)
+		log.Infof("UnSub topic %s, Qos: %d", m.beaconRequestTopic, mqttQOS)
 		if token := client.Unsubscribe(m.beaconRequestTopic); token.Error() != nil {
 			// Return Error
 			return token.Error()
