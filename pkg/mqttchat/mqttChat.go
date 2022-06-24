@@ -151,21 +151,18 @@ func (m *MqttChat) Transmit(out string, cmdUuid string, clientUuid string) {
 		cmdUuid = shortuuid.New()
 	}
 
-	go func() {
-		now := time.Now().String()
-		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, CmdUUID: cmdUuid, ClientUUID: clientUuid}
+	now := time.Now().String()
+	reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, CmdUUID: cmdUuid, ClientUUID: clientUuid}
 
-		b, err := json.Marshal(reply)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		// fmt.Print(string(b))
+	b, err := json.Marshal(reply)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-		encodedString := base64.StdEncoding.EncodeToString(b)
+	encodedString := base64.StdEncoding.EncodeToString(b)
+	m.mqttClient.Publish(m.txTopic, 0, false, encodedString)
 
-		m.mqttClient.Publish(m.txTopic, 0, false, encodedString)
-	}()
 }
 
 func decodeData(dataraw []byte) []byte {
