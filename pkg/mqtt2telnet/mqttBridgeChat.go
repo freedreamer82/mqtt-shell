@@ -47,9 +47,10 @@ type outMessage struct {
 }
 
 func NewBridgeChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string, version string, scriptsPath string, opts ...mqttchat.MqttChatOption) *MqttBridgeChat {
+	bridgeVersion := version + " - bridge"
 
 	bc := MqttBridgeChat{scriptsPath: scriptsPath}
-	chat := mqttchat.NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
+	chat := mqttchat.NewChat(mqttOpts, rxTopic, txTopic, bridgeVersion, opts...)
 	chat.SetDataCallback(bc.OnDataRx)
 
 	out := make(chan outMessage, 100)
