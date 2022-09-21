@@ -211,6 +211,12 @@ func Parse(v *viper.Viper, configFile string, cli *CLI) (*Config, error) {
 
 	mergeCliandConfig(&config, cli)
 
+	id := os.Getenv("MQTT_SHELL_ID")
+	if id != "" {
+		log.Debugf("conf Id %s is changed with environment variable: %s", config.Id, id)
+		config.Id = id
+	}
+
 	if config.Id != "" {
 		config.TxTopic = getTxTopic(config.Id)
 		config.RxTopic = getRxTopic(config.Id)
