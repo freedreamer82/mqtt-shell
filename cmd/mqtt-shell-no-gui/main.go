@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/freedreamer82/mqtt-shell/pkg/info"
+	"github.com/freedreamer82/mqtt-shell/pkg/mqtt2telnet"
 	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
@@ -89,6 +90,11 @@ func main() {
 			config.BeaconConverter)
 		discovery.Run(nil)
 		return
+	} else if conf.Mode == "bridge" {
+		log.Info("Starting bridge server..")
+		chat := mqtt2telnet.NewBridgeChat(mqttOpts, conf.RxTopic, conf.TxTopic, info.VERSION, conf.ScriptsDir,
+			mqttchat.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
+		chat.Start()
 	}
 
 	select {} //wait forever
