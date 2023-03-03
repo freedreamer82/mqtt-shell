@@ -27,6 +27,7 @@ func (p *blackRenderer) BackgroundColor() color.Color {
 type MainScreen struct {
 	container     fyne.CanvasObject
 	sendButton    *widget.Button
+	clearButton   *widget.Button
 	input         *widget.Entry
 	isConnected   bool
 	cmdScreen     *CmdScreen
@@ -157,6 +158,8 @@ func (s *MainScreen) GetContainer() fyne.CanvasObject {
 func (s *MainScreen) clear() {
 	if s.shell != nil {
 		s.shell.SetText("")
+		s.inputText = ""
+		s.input.SetText("")
 	}
 }
 
@@ -170,9 +173,15 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	s.chanReadReady = make(chan bool)
 	s.cmdScreen.SetOnCloseCallback(s.onCloseCmdCb)
 
-	sendButton := widget.NewButton(constant.HOME_SCREEN_ClearButton, func() {
+	clearButton := widget.NewButton(constant.HOME_SCREEN_ClearButton, func() {
 		s.clear()
 	})
+
+	sendButton := widget.NewButton(constant.HOME_SCREEN_SendButton, func() {
+		s.Write([]byte("\n"))
+		s.chanReadReady <- true
+	})
+
 	input.OnSubmitted = func(tosend string) {
 		//s.Write([]byte(fmt.Sprintf("%s", tosend)))
 		s.Write([]byte("\n"))
@@ -227,13 +236,14 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 
 	cont := container.NewBorder(
 		container.NewBorder(nil, nil, nil, container.NewHBox(scan, s.connectedText, s.connectedIcon), s.clientName),
-		container.NewBorder(nil, nil, nil, container.NewHBox(clearInput, addCommandButton, cmdListButton, sendButton), input),
+		container.NewBorder(nil, nil, nil, container.NewHBox(clearInput, addCommandButton, cmdListButton, clearButton, sendButton), input),
 		nil, nil,
 		s.scroll)
 
 	s.container = cont
 	s.input = input
 	s.sendButton = sendButton
+	s.sendButton = clearButton
 
 	s.mqttScreen.scanScreen.SetCallbackClient(s.clientCb)
 
