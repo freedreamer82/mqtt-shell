@@ -2,9 +2,12 @@ package screens
 
 import (
 	"fmt"
+	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	MQTT "github.com/eclipse/paho.mqtt.golang"
@@ -99,6 +102,18 @@ func (s *ScanScreen) ShowPopUp() {
 	})
 	okButton.Disable()
 
+	infoButton := widget.NewButton("info", func() {
+
+		msg := []string{}
+		msg = append(msg, "Name: "+s.clients[s.selectedCmd].Id)
+		msg = append(msg, "Version: "+s.clients[s.selectedCmd].Version)
+		msg = append(msg, "Ip: "+s.clients[s.selectedCmd].Ip)
+		msg = append(msg, "Time: "+s.clients[s.selectedCmd].Time)
+
+		dialog.ShowInformation("Info", strings.Join(msg, "\n"), s.app)
+	})
+	infoButton.Disable()
+
 	s.listData = widget.NewList(
 		func() int {
 			return len(s.clients)
@@ -108,7 +123,7 @@ func (s *ScanScreen) ShowPopUp() {
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
 			item.(*fyne.Container).Objects[0].(*widget.Label).SetText(s.clients[id].Id)
-			item.(*fyne.Container).Objects[2].(*widget.Label).SetText(s.clients[id].Ip)
+			//item.(*fyne.Container).Objects[2].(*widget.Label).SetText(s.clients[id].Ip)
 			item.(*fyne.Container).Objects[3].(*widget.Label).SetText(s.clients[id].Version)
 		},
 	)
@@ -116,9 +131,10 @@ func (s *ScanScreen) ShowPopUp() {
 		fmt.Printf("selected %d", id)
 		s.selectedCmd = id
 		okButton.Enable()
+		infoButton.Enable()
 	}
 
-	c := container.NewBorder(nil, container.NewHBox(cancelButton, okButton), nil, nil,
+	c := container.NewBorder(nil, container.NewHBox(cancelButton, okButton, layout.NewSpacer(), infoButton), nil, nil,
 		container.NewScroll(s.listData))
 
 	s.container = widget.NewModalPopUp(c, s.app.Canvas())
