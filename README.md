@@ -6,6 +6,7 @@ mqtt-shell is a go tool to connect to a remote shell via mqtt. It includes:
  - mqtt-shell server ( go daemon for the remote host )
  - mqtt-shell client ( go tool to connect to a server )
  - mqtt-shell beacon discovery ( go tool to find all mqtt-shell severs connected to the broker )
+ - mqtt-shell bridge ( go daemon for the remote host to telnet connect to other hosts )
 
 It also includes a gui that implement client and beacon discovery features.
 Gui is available for linux windows mac and also for mobile ios and android
@@ -76,4 +77,11 @@ beacon discovery response
 Ip:      10.0.49.51 - Id:      mqtt-shell-test - Version:       0.0.4 - Time: 2022-04-14 08:13:52.677526253 +0200 CEST 
 Ip: 192.168.251.210 - Id:  mqtt-shell-server-1 - Version:       0.0.3 - Time: 2022-04-14 06:13:52.669033242 +0000 UTC 
 Ip:    218.16.79.73 - Id:  mqtt-shell-server-2 - Version:       0.0.3 - Time: 2022-04-14 08:13:52.677131422 +0200 CEST 
+```
+
+### Start mqtt-shell bridge
+after build
+
+```sh
+$ ./mqtt-shell -b <mqttbroker> -u <user> -P <password>  -p <mqttbrokerport> -m bridge -i <id>
 ```

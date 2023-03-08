@@ -38,7 +38,8 @@ type CLI struct {
 	BrokerPort     int              `short:"p" help:"broker port"`
 	Version        kong.VersionFlag `short:"v" xor:"flags"`
 	Id             string           `short:"i" help:"node id"`
-	Mode           string           `short:"m" enum:"client,server,beacon,gui" default:"client" help:"client, server or beacon,default client"`
+	Mode           string           `short:"m" enum:"client,server,beacon,bridge,gui,null" default:"null" help:"client, server, bridge, beacon or gui"`
+	ScriptsDir     string           `short:"s" help:"bridge scripts directory"`
 }
 
 var (
@@ -164,6 +165,9 @@ func fileExists(filename string) bool {
 }
 
 func mergeCliandConfig(config *Config, cli *CLI) {
+	if cli.Mode == "null" {
+		cli.Mode = ""
+	}
 	mergo.Merge(&config.CLI, cli, mergo.WithOverride)
 }
 
@@ -211,7 +215,7 @@ func Parse(v *viper.Viper, configFile string, cli *CLI) (*Config, error) {
 	mergeCliandConfig(&config, cli)
 
 	id := os.Getenv("MQTT_SHELL_ID")
-	if id != "" {
+	if id != "" && config.Id == "" {
 		log.Debugf("conf Id %s is changed with environment variable: %s", config.Id, id)
 		config.Id = id
 	}
