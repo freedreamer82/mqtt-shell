@@ -205,7 +205,7 @@ func (m *MqttChat) onBeaconRequest(client MQTT.Client, msg MQTT.Message) {
 func (m *MqttChat) sendBeacon() {
 	if m.beaconTopic != "" {
 		now := time.Now().String()
-		fromNow := m.uptime().String()
+		fromNow := fmtDuration(m.uptime())
 		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Data: fromNow}
 
 		b, err := json.Marshal(reply)
@@ -304,6 +304,15 @@ func WithOptionConnectionCallaback(cb ConnectionCallback) MqttChatOption {
 
 func (m *MqttChat) uptime() time.Duration {
 	return time.Since(m.startTime)
+}
+
+func fmtDuration(d time.Duration) string {
+	//d = d.Round(time.Minute)
+	//h := d / time.Hour
+	//d -= h * time.Hour
+	//m := d / time.Minute
+	//return fmt.Sprintf("%02d:%02d", h, m)
+	return fmt.Sprintf("%s", d)
 }
 
 func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, version string, opts ...MqttChatOption) *MqttChat {
