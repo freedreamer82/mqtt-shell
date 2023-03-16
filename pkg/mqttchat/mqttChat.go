@@ -153,7 +153,7 @@ func (m *MqttChat) Transmit(out string, cmdUuid string, clientUuid string) {
 		cmdUuid = shortuuid.New()
 	}
 
-	now := time.Now().String()
+	now := time.Now().Format(time.DateTime)
 	reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, CmdUUID: cmdUuid, ClientUUID: clientUuid}
 
 	b, err := json.Marshal(reply)
@@ -204,7 +204,8 @@ func (m *MqttChat) onBeaconRequest(client MQTT.Client, msg MQTT.Message) {
 
 func (m *MqttChat) sendBeacon() {
 	if m.beaconTopic != "" {
-		now := time.Now().String()
+
+		now := time.Now().Format(time.DateTime)
 		fromNow := fmtDuration(m.uptime())
 		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Data: fromNow}
 

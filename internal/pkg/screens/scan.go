@@ -108,7 +108,8 @@ func (s *ScanScreen) ShowPopUp() {
 		msg = append(msg, "Name: "+s.clients[s.selectedCmd].Id)
 		msg = append(msg, "Version: "+s.clients[s.selectedCmd].Version)
 		msg = append(msg, "Ip: "+s.clients[s.selectedCmd].Ip)
-		msg = append(msg, "Uptime: "+s.clients[s.selectedCmd].Time)
+		msg = append(msg, "Time: "+s.clients[s.selectedCmd].Time)
+		msg = append(msg, "Uptime: "+s.clients[s.selectedCmd].Uptime)
 
 		dialog.ShowInformation("Info", strings.Join(msg, "\n"), s.app)
 	})
