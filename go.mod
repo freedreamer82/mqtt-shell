@@ -1,6 +1,6 @@
 module github.com/freedreamer82/mqtt-shell
 
-go 1.18
+go 1.20
 
 require (
 	fyne.io/fyne/v2 v2.2.1
@@ -10,6 +10,7 @@ require (
 	github.com/imdario/mergo v0.3.13
 	github.com/lithammer/shortuuid/v3 v3.0.7
 	github.com/mitchellh/mapstructure v1.5.0
+	github.com/reiver/go-telnet v0.0.0-20180421082511-9ff0b2ab096e
 	github.com/rotisserie/eris v0.5.4
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/viper v1.12.0
@@ -42,7 +43,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/reiver/go-oi v1.0.0 // indirect
-	github.com/reiver/go-telnet v0.0.0-20180421082511-9ff0b2ab096e // indirect
 	github.com/spf13/afero v1.8.2 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
