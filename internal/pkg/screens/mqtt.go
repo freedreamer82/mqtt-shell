@@ -8,7 +8,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	MQTT "github.com/eclipse/paho.mqtt.golang"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
-	mqtt "github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
+	"github.com/freedreamer82/mqtt-shell/pkg/mqtt"
 )
 
 type MqttDialog struct {

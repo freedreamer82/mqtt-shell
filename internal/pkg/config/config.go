@@ -26,8 +26,6 @@ const (
 	defaultLogFileMaxSize = 10 * 1024 * 1024 // 10 Megabytes
 
 )
-const INFO = "mqtt-shell\r\nSw Engineer: Marco Garzola"
-const VERSION = "0.0.5"
 
 type CLI struct {
 	ConfigFile     string           `short:"c" xor:"config" type:"existingfile"`
@@ -38,8 +36,7 @@ type CLI struct {
 	BrokerPort     int              `short:"p" help:"broker port"`
 	Version        kong.VersionFlag `short:"v" xor:"flags"`
 	Id             string           `short:"i" help:"node id"`
-	Mode           string           `short:"m" enum:"client,server,beacon,bridge,gui,null" default:"null" help:"client, server, bridge, beacon or gui"`
-	ScriptsDir     string           `short:"s" help:"bridge scripts directory"`
+	Mode           string           `short:"m" enum:"client,server,beacon,gui,null" default:"null" help:"client, server, beacon, or gui"`
 }
 
 var (
@@ -111,10 +108,17 @@ type Config struct {
 	BeaconRequestTopic  string
 	BeaconResponseTopic string
 	TimeoutBeaconSec    uint64
+	TelnetBridgePlugin  TelnetBridgePluginConfig
 }
 
-/// NewConfig creates a new configuration structure
-/// filled with default options
+type TelnetBridgePluginConfig struct {
+	Enabled        bool
+	Keyword        string
+	MaxConnections int
+}
+
+// / NewConfig creates a new configuration structure
+// / filled with default options
 func NewConfig() Config {
 	_, addr := getNetInfo()
 	return Config{
@@ -126,11 +130,12 @@ func NewConfig() Config {
 		BeaconRequestTopic:  BeaconRequestTopic,
 		BeaconResponseTopic: BeaconReplyTopic, //getBeaconTopic("+"),
 		TimeoutBeaconSec:    10,
+		TelnetBridgePlugin:  TelnetBridgePluginConfig{Enabled: false, Keyword: "telnet", MaxConnections: 5},
 	}
 }
 
-/// NewLoggingConfig creates a new logging configuration structure
-/// filled with default options
+// / NewLoggingConfig creates a new logging configuration structure
+// / filled with default options
 func NewLoggingConfig() LoggingConfig {
 	return LoggingConfig{
 		Enabled:      true,
@@ -142,8 +147,8 @@ func NewLoggingConfig() LoggingConfig {
 	}
 }
 
-/// NewLoggingFileConfig creates a new logging file config structure
-/// filed with default parameters
+// / NewLoggingFileConfig creates a new logging file config structure
+// / filed with default parameters
 func NewLoggingFileConfig() LoggingFileConfig {
 	return LoggingFileConfig{
 		Enabled:      false,
@@ -171,8 +176,8 @@ func mergeCliandConfig(config *Config, cli *CLI) {
 	mergo.Merge(&config.CLI, cli, mergo.WithOverride)
 }
 
-/// Parse loads the configuration
-/// using a pre initialized viper object
+// / Parse loads the configuration
+// / using a pre initialized viper object
 func Parse(v *viper.Viper, configFile string, cli *CLI) (*Config, error) {
 	var err error
 
@@ -231,8 +236,8 @@ func Parse(v *viper.Viper, configFile string, cli *CLI) (*Config, error) {
 	return &config, nil
 }
 
-/// stringToFileSizeHookFunc is a mapstructure decode hook
-/// which decodes strings to file sizes
+// / stringToFileSizeHookFunc is a mapstructure decode hook
+// / which decodes strings to file sizes
 func stringToFileSizeHookFunc() mapstructure.DecodeHookFunc {
 	return func(f reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
 		if f.Kind() != reflect.String || t != reflect.TypeOf(FileSize(0)) {
@@ -246,8 +251,8 @@ func stringToFileSizeHookFunc() mapstructure.DecodeHookFunc {
 	}
 }
 
-/// stringToLogLevelHookFunc is a mapstructure decode hook
-/// which decodes strings to log levels
+// / stringToLogLevelHookFunc is a mapstructure decode hook
+// / which decodes strings to log levels
 func stringToLogLevelHookFunc() mapstructure.DecodeHookFunc {
 	return func(f reflect.Type, t reflect.Type, data interface{}) (interface{}, error) {
 		if f.Kind() != reflect.String || t != reflect.TypeOf(logrus.DebugLevel) {

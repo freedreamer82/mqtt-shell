@@ -3,6 +3,7 @@ package mqttchat
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/freedreamer82/mqtt-shell/pkg/mqtt"
 	"math/rand"
 	"time"
 
@@ -27,14 +28,14 @@ type BeaconDiscovery struct {
 	closeChan           chan bool
 	converter           NodeIdFromTopic
 	clients             chan Client
-	cb                  ConnectionCallback
+	cb                  mqtt.ConnectionCallback
 	timerCheckEnabled   bool
 }
 
 type BeaconDiscoveryOption func(*BeaconDiscovery)
 type NodeIdFromTopic func(string) string
 
-func WithDiscoveryConnectionCallback(cb ConnectionCallback) BeaconDiscoveryOption {
+func WithDiscoveryConnectionCallback(cb mqtt.ConnectionCallback) BeaconDiscoveryOption {
 	return func(h *BeaconDiscovery) {
 		h.cb = cb
 	}
@@ -55,8 +56,6 @@ func NewBeaconDiscovery(mqttOpts *MQTT.ClientOptions,
 
 	b := BeaconDiscovery{mqttOpts: mqttOpts, cb: nil,
 		beaconRequestTopic: beaconRequestTopic, beaconResponseTopic: beaconResponseTopic, timeout: timeout, converter: converter, timerCheckEnabled: true}
-
-	b.mqttOpts.SetClientID(getRandomClientId())
 
 	b.closeChan = make(chan bool)
 
@@ -106,7 +105,7 @@ func (b *BeaconDiscovery) Run(ch chan Client) {
 
 func (b *BeaconDiscovery) onBrokerConnect(client MQTT.Client) {
 	if b.cb != nil {
-		b.cb(ConnectionStatus_Connected)
+		b.cb(mqtt.ConnectionStatus_Connected)
 	}
 	log.Debugln("Connect to broker")
 	err := b.subscribeMessagesToBroker()
@@ -120,7 +119,7 @@ func (b *BeaconDiscovery) onBrokerDisconnect(client MQTT.Client, err error) {
 	log.Debug("BROKER disconnected !", err)
 	b.closeChan <- true
 	if b.cb != nil {
-		b.cb(ConnectionStatus_Disconnected)
+		b.cb(mqtt.ConnectionStatus_Disconnected)
 	}
 }
 

@@ -16,12 +16,17 @@ import (
 const prompt = ">"
 const login = "-------------------------------------------------\r\n|  Mqtt-shell client \r\n|\r\n|  IP: %s \r\n|  SERVER VER: %s - CLIENT VER: %s\r\n|  CLIENT UUID: %s\r\n|  TX: %s\r\n|  RX: %s\r\n|\r\n-------------------------------------------------\r\n"
 
+const RED = "\033[1;31m"
+const NC = "\033[0m"
+
 type MqttClientChat struct {
 	*MqttChat
 	waitServerChan chan bool
 	ch             chan []byte
 	io             ClientChatIO
 	uuid           string
+	customPrompt   string
+	enableColor    bool
 }
 
 func (m *MqttClientChat) print(a ...interface{}) (n int, err error) {
@@ -50,6 +55,7 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 		return
 	}
 	out := strings.TrimSuffix(data.Data, "\n") // remove newline
+	m.customPrompt = data.CustomPrompt
 	m.print(out)
 	m.println()
 	m.printPrompt()
@@ -68,7 +74,15 @@ func (m *MqttClientChat) waitServerCb(data MqttJsonData) {
 }
 
 func (m *MqttClientChat) printPrompt() {
-	m.printWithoutLn(prompt)
+	p := prompt
+	if m.customPrompt != "" {
+		p = fmt.Sprintf("<%s%s", m.customPrompt, prompt)
+	}
+	if m.enableColor {
+		m.printWithoutLn(fmt.Sprintf("%s%s%s", RED, p, NC))
+	} else {
+		m.printWithoutLn(p)
+	}
 }
 
 func (m *MqttClientChat) printLogin(ip string, serverVersion string) {
@@ -125,12 +139,13 @@ func defaultIO() ClientChatIO {
 func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string,
 	version string, opts ...MqttChatOption) *MqttClientChat {
 
-	cc := MqttClientChat{io: defaultIO(), uuid: shortuuid.New()}
+	cc := MqttClientChat{io: defaultIO(), uuid: shortuuid.New(), customPrompt: ""}
 	chat := NewChat(mqttOpts, rxTopic, txTopic, version, opts...)
 	chat.SetDataCallback(cc.OnDataRx)
 	cc.MqttChat = chat
-	chat.mqttOpts.SetOrderMatters(true)
+	chat.worker.GetOpts().SetOrderMatters(true)
 	cc.waitServerChan = make(chan bool)
+	cc.enableColor = true
 	go cc.clientTask()
 
 	return &cc
@@ -144,6 +159,7 @@ func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txT
 	chat.SetDataCallback(cc.OnDataRx)
 	cc.MqttChat = chat
 	cc.waitServerChan = make(chan bool)
+	cc.enableColor = false
 	go cc.clientTask()
 
 	return &cc
