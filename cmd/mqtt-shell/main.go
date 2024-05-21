@@ -9,8 +9,8 @@ import (
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/locale"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/screens"
 	"github.com/freedreamer82/mqtt-shell/pkg/info"
-	"github.com/freedreamer82/mqtt-shell/pkg/mqtt2telnet"
 	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
+	"github.com/freedreamer82/mqtt-shell/pkg/plugins/telnetbridge"
 
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/config"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/logging"
@@ -102,7 +102,13 @@ func main() {
 
 	if conf.Mode == "server" {
 		log.Info("Starting server..")
-		chat := mqttchat.NewServerChat(mqttOpts, conf.RxTopic, conf.TxTopic, info.VERSION, mqttchat.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
+		topic := mqttchat.ServerTopic{RxTopic: conf.RxTopic, TxTopic: conf.TxTopic, BeaconRxTopic: conf.BeaconTopic, BeaconTxTopic: conf.BeaconRequestTopic}
+		var chat *mqttchat.MqttServerChat
+		if conf.TelnetBridgePlugin.Enabled {
+			chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION, telnetbridge.WithTelnetBridge(conf.TelnetBridgePlugin.MaxConnections, conf.TelnetBridgePlugin.Keyword))
+		} else {
+			chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION)
+		}
 		chat.Start()
 	} else if conf.Mode == "client" {
 
@@ -116,10 +122,6 @@ func main() {
 			config.BeaconConverter)
 		discovery.Run(nil)
 		return
-	} else if conf.Mode == "bridge" {
-		log.Info("Starting bridge server..")
-		chat := mqtt2telnet.NewBridgeChat(mqttOpts, conf.RxTopic, conf.TxTopic, info.VERSION, conf.ScriptsDir, mqttchat.WithOptionBeaconTopic(conf.BeaconTopic, conf.BeaconRequestTopic))
-		chat.Start()
 	}
 
 	select {} //wait forever
