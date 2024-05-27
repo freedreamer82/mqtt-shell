@@ -2,11 +2,12 @@ package screens
 
 import (
 	"fmt"
-	"github.com/freedreamer82/mqtt-shell/pkg/info"
-	mqtt "github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 	"image/color"
 	"io"
 	"strings"
+
+	"github.com/freedreamer82/mqtt-shell/pkg/info"
+	mqtt "github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -35,6 +36,7 @@ type MainScreen struct {
 	shell         *widget.Label
 	mqttScreen    *MqttDialog
 	connectedText *widget.Label
+	verText       *widget.Label
 	client        *mqtt.MqttClientChat
 	app           fyne.App
 	appWindow     fyne.Window
@@ -116,6 +118,7 @@ func (s *MainScreen) clientCb(c string) {
 	s.clientName.SetText(c)
 
 	s.connectedText.SetText(constant.HOME_SCREEN_Broker_Connected)
+	s.verText.SetText(info.VERSION)
 	s.connectedIcon.SetResource(theme.ConfirmIcon())
 
 	txTopic := fmt.Sprintf(config.TemplateSubTopic, c)
@@ -213,6 +216,8 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	icon := theme.MediaRecordIcon()
 
 	s.connectedText = widget.NewLabel(constant.HOME_SCREEN_Broker_Disconnected)
+	s.verText = widget.NewLabel(info.VERSION)
+
 	s.connectedIcon = widget.NewIcon(icon)
 	s.connectedIcon.SetResource(theme.ContentClearIcon())
 
@@ -235,7 +240,7 @@ func NewMainScreen(app fyne.App, appWindow fyne.Window) *MainScreen {
 	s.scroll = container.NewScroll(s.shell)
 
 	cont := container.NewBorder(
-		container.NewBorder(nil, nil, nil, container.NewHBox(scan, s.connectedText, s.connectedIcon), s.clientName),
+		container.NewBorder(nil, nil, nil, container.NewHBox(scan, s.connectedText, s.connectedIcon, s.verText), s.clientName),
 		container.NewBorder(nil, nil, nil, container.NewHBox(clearInput, addCommandButton, cmdListButton, clearButton, sendButton), input),
 		nil, nil,
 		s.scroll)
