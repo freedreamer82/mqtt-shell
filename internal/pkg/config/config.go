@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"strings"
 
+	"dario.cat/mergo"
 	"github.com/alecthomas/kong"
 	"github.com/dustin/go-humanize"
-	"github.com/imdario/mergo"
 	"github.com/mitchellh/mapstructure"
 	"github.com/rotisserie/eris"
 	"github.com/sirupsen/logrus"
