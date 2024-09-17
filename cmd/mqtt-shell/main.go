@@ -104,10 +104,13 @@ func main() {
 		log.Info("Starting server..")
 		topic := mqttchat.ServerTopic{RxTopic: conf.RxTopic, TxTopic: conf.TxTopic, BeaconRxTopic: conf.BeaconTopic, BeaconTxTopic: conf.BeaconRequestTopic}
 		var chat *mqttchat.MqttServerChat
+
+		netIOpt := mqttchat.WithOptionNetworkInterface(conf.Network.Interface)
+
 		if conf.TelnetBridgePlugin.Enabled {
-			chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION, telnetbridge.WithTelnetBridge(conf.TelnetBridgePlugin.MaxConnections, conf.TelnetBridgePlugin.Keyword))
+			chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION, netIOpt, telnetbridge.WithTelnetBridge(conf.TelnetBridgePlugin.MaxConnections, conf.TelnetBridgePlugin.Keyword))
 		} else {
-			chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION)
+			chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION, netIOpt)
 		}
 		chat.Start()
 	} else if conf.Mode == "client" {

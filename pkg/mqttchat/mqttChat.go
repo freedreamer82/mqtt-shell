@@ -3,6 +3,7 @@ package mqttchat
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/freedreamer82/mqtt-shell/pkg/mqtt"
 	"math/rand"
@@ -46,22 +47,43 @@ type MqttChat struct {
 	version            string
 	startTime          time.Time
 	isRunning          bool
+	netInterface       string
 }
 
 func (m *MqttChat) SetDataCallback(cb OnDataCallback) {
 	m.Cb = cb
 }
 
+func getInterfaceIpv4Addr(interfaceName string) (addr string, err error) {
+	var (
+		ief      *net.Interface
+		addrs    []net.Addr
+		ipv4Addr net.IP
+	)
+	if ief, err = net.InterfaceByName(interfaceName); err != nil { // get interface
+		return
+	}
+	if addrs, err = ief.Addrs(); err != nil { // get addresses
+		return
+	}
+	for _, addr := range addrs { // get ipv4 address
+		if ipv4Addr = addr.(*net.IPNet).IP.To4(); ipv4Addr != nil {
+			break
+		}
+	}
+	if ipv4Addr == nil {
+		return "", errors.New(fmt.Sprintf("interface %s don't have an ipv4 address\n", interfaceName))
+	}
+	return ipv4Addr.String(), nil
+}
+
 func (m *MqttChat) getIpAddress() string {
-	// conn, err := net.Dial("udp", "8.8.8.8:80")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer conn.Close()
 
-	// localAddr := conn.LocalAddr().(*net.UDPAddr)
+	if m.netInterface != "" {
+		addr, _ := getInterfaceIpv4Addr(m.netInterface)
+		return addr
+	}
 
-	// return localAddr.IP.String()
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return ""
@@ -74,6 +96,7 @@ func (m *MqttChat) getIpAddress() string {
 			}
 		}
 	}
+
 	return ""
 
 }
@@ -226,7 +249,7 @@ func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, versi
 
 	w := mqtt.NewWorker(mqttOpts, true, nil)
 	m := MqttChat{worker: w, rxTopic: rxTopic, txTopic: txtopic, version: version,
-		beaconTopic: "", Cb: nil, isRunning: false}
+		beaconTopic: "", Cb: nil, isRunning: false, netInterface: ""}
 
 	m.startTime = time.Now()
 	m.timeoutCmdShell = defaultTimeoutCmd

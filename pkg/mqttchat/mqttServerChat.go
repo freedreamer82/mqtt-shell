@@ -66,6 +66,12 @@ func WithOptionBeaconTopic(topic string, topicRequest string) MqttChatOption {
 	}
 }
 
+func WithOptionNetworkInterface(netI string) MqttServerChatOption {
+	return func(m *MqttServerChat) {
+		m.netInterface = netI
+	}
+}
+
 type ServerTopic struct {
 	RxTopic       string
 	TxTopic       string
@@ -83,6 +89,10 @@ func NewServerChat(mqttOpts *MQTT.ClientOptions, topics ServerTopic, version str
 	sc.outputChan = make(chan OutMessage, outputMsgSize)
 	for _, opt := range opts {
 		opt(&sc)
+	}
+
+	if sc.netInterface != "" {
+		sc.MqttChat.netInterface = sc.netInterface
 	}
 	go sc.mqttTransmit()
 	return &sc

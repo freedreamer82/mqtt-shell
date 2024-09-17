@@ -98,6 +98,10 @@ type LoggingConfig struct {
 	File LoggingFileConfig
 }
 
+type Network struct {
+	Interface string
+}
+
 type Config struct {
 	CLI
 	// Logging is the logging configuration
@@ -109,6 +113,7 @@ type Config struct {
 	BeaconResponseTopic string
 	TimeoutBeaconSec    uint64
 	TelnetBridgePlugin  TelnetBridgePluginConfig
+	Network             Network
 }
 
 type TelnetBridgePluginConfig struct {
@@ -127,6 +132,7 @@ func NewConfig() Config {
 		TxTopic:             getTxTopic(addr),
 		RxTopic:             getRxTopic(addr),
 		BeaconTopic:         getBeaconTopic(addr),
+		Network:             Network{Interface: ""},
 		BeaconRequestTopic:  BeaconRequestTopic,
 		BeaconResponseTopic: BeaconReplyTopic, //getBeaconTopic("+"),
 		TimeoutBeaconSec:    10,
