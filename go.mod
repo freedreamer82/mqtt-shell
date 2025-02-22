@@ -18,7 +18,10 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
-require dario.cat/mergo v1.0.1
+require (
+	dario.cat/mergo v1.0.0
+	github.com/eiannone/keyboard v0.0.0-20220611211555-0d226195f203
+)
 
 require (
 	fyne.io/systray v1.11.0 // indirect
