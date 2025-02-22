@@ -2,39 +2,40 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 
 	"github.com/eiannone/keyboard"
 )
 
-// LineNotification represents a notification with the line read and the line ending character.
+// LineNotification represents a notification with the line read and the line ending key.
 type LineNotification struct {
-	Line       string // The line read
-	LineEnding rune   // The line ending character identified
+	Line       string       // The line read
+	LineEnding keyboard.Key // The key that caused the line to end
 }
 
-// InputReader reads input from the keyboard and notifies when a line ending is detected.
-type InputReader struct {
-	lineEndings map[rune]bool         // Map of line ending characters
-	outputChan  chan LineNotification // Channel to send notifications
+// CustomIO handles input and output operations.
+type CustomIO struct {
+	lineEndingKeys map[keyboard.Key]bool // Set of keys that represent line endings
+	outputChan     chan LineNotification // Channel to send notifications
 }
 
-// NewInputReader creates a new InputReader with the specified line endings.
-func NewInputReader(lineEndings []rune) *InputReader {
-	// Create a map for line ending characters
-	endings := make(map[rune]bool)
-	for _, le := range lineEndings {
-		endings[le] = true
+// NewCustomIO creates a new CustomIO with the specified line ending keys.
+func NewCustomIO(lineEndingKeys []keyboard.Key) *CustomIO {
+	// Create a set of line ending keys
+	endings := make(map[keyboard.Key]bool)
+	for _, key := range lineEndingKeys {
+		endings[key] = true
 	}
 
-	return &InputReader{
-		lineEndings: endings,
-		outputChan:  make(chan LineNotification),
+	return &CustomIO{
+		lineEndingKeys: endings,
+		outputChan:     make(chan LineNotification),
 	}
 }
 
 // Start begins reading input from the keyboard.
-func (ir *InputReader) Start() {
+func (cio *CustomIO) Start() {
 	go func() {
 		// Open the keyboard for reading input
 		if err := keyboard.Open(); err != nil {
@@ -60,34 +61,12 @@ func (ir *InputReader) Start() {
 				continue
 			}
 
-			// Check if the key is a line ending (Tab or Enter)
-			isLineEnding := false
-			var lineEnding rune
-
-			// Check if the character is a line ending (e.g., Tab)
-			if ir.lineEndings[char] {
-				isLineEnding = true
-				lineEnding = char
-			}
-
-			// Check if the key is Enter
-			if key == keyboard.KeyEnter {
-				isLineEnding = true
-				lineEnding = '\n' // Use '\n' to represent Enter
-			}
-
-			// Check if the key is Tab
-			if key == keyboard.KeyTab {
-				isLineEnding = true
-				lineEnding = '\t' // Use '\t' to represent Tab
-			}
-
-			// If it's a line ending, send the notification
-			if isLineEnding {
+			// Check if the key is a line ending key
+			if cio.lineEndingKeys[key] {
 				line := string(buffer) // Convert the buffer to a string
-				ir.outputChan <- LineNotification{
+				cio.outputChan <- LineNotification{
 					Line:       line,
-					LineEnding: lineEnding,
+					LineEnding: key,
 				}
 				buffer = buffer[:0] // Reset the buffer
 				fmt.Println()       // Move to a new line after notification
@@ -107,28 +86,66 @@ func (ir *InputReader) Start() {
 		}
 
 		// Close the channel when exiting the loop
-		close(ir.outputChan)
+		close(cio.outputChan)
 	}()
 }
 
-// GetOutputChan returns the channel for receiving notifications.
-func (ir *InputReader) GetOutputChan() <-chan LineNotification {
-	return ir.outputChan
+// GetLine reads the next line and returns the line and the line ending key.
+func (cio *CustomIO) GetLine() (string, keyboard.Key, bool) {
+	notification, ok := <-cio.outputChan
+	if !ok {
+		return "", 0, false // Channel closed
+	}
+	return notification.Line, notification.LineEnding, true
+}
+
+// Write writes data to the standard output.
+func (cio *CustomIO) Write(p []byte) (n int, err error) {
+	return fmt.Print(string(p)) // Write to standard output
+}
+
+// Read reads input from the keyboard and returns it as a byte slice.
+func (cio *CustomIO) Read(p []byte) (n int, err error) {
+	line, _, ok := cio.GetLine()
+	if !ok {
+		return 0, io.EOF // No more input
+	}
+	copy(p, []byte(line))
+	return len(line), nil
 }
 
 func main() {
-	// Define the line ending characters (e.g., Tab and Enter)
-	lineEndings := []rune{'\t', '\n'}
+	// Define the line ending keys (e.g., Enter, Tab, Arrow Up, Arrow Down)
+	lineEndingKeys := []keyboard.Key{
+		keyboard.KeyEnter,     // Enter key
+		keyboard.KeyTab,       // Tab key
+		keyboard.KeyArrowUp,   // Arrow Up key
+		keyboard.KeyArrowDown, // Arrow Down key
+	}
 
-	// Create a new InputReader
-	reader := NewInputReader(lineEndings)
+	// Create a new CustomIO
+	customIO := NewCustomIO(lineEndingKeys)
 
 	// Start reading input
-	reader.Start()
+	customIO.Start()
 
-	// Read from the channel and handle notifications
-	for notification := range reader.GetOutputChan() {
-		fmt.Printf("Received line: %s (Line ending: %q)\n", notification.Line, notification.LineEnding)
+	// Use CustomIO for reading and writing
+	for {
+		line, lineEndingKey, ok := customIO.GetLine()
+		if !ok {
+			break // Exit if the channel is closed
+		}
+
+		if line == "" {
+			fmt.Println("Empty line detected. Printing prompt...")
+			// Simulate printing a prompt
+			fmt.Print("> ")
+		} else {
+			// Write the received line to standard output
+			customIO.Write([]byte(fmt.Sprintf("Transmitting line: %s (Line ending key: %v)\n", line, lineEndingKey)))
+			// Simulate transmitting the line
+			// m.Transmit(line, lineEndingKey, m.uuid)
+		}
 	}
 
 	fmt.Println("Program terminated.")
