@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/freedreamer82/mqtt-shell/pkg/mqtt"
 	"math/rand"
 	"net"
 	"time"
+
+	"github.com/freedreamer82/mqtt-shell/pkg/mqtt"
 
 	log "github.com/sirupsen/logrus"
 
@@ -32,6 +33,7 @@ type MqttJsonData struct {
 	ClientUUID   string `json:"clientuuid"`
 	Datetime     string `json:"datetime"`
 	CustomPrompt string `json:"customprompt"`
+	Flags        uint32 `json:"flags"`
 }
 
 type OnDataCallback func(data MqttJsonData)
@@ -143,7 +145,7 @@ func (m *MqttChat) getIpAddress() string {
 //	return nil
 //}
 
-func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, customPrompt string) {
+func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, customPrompt string, flags uint32) {
 
 	if cmdUuid == "" {
 		//generate one random..
@@ -151,7 +153,8 @@ func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, custo
 	}
 
 	now := time.Now().Format(time.DateTime)
-	reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, CmdUUID: cmdUuid, ClientUUID: clientUuid, CustomPrompt: customPrompt}
+	reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, CmdUUID: cmdUuid,
+		ClientUUID: clientUuid, CustomPrompt: customPrompt, Flags: flags}
 
 	b, err := json.Marshal(reply)
 	if err != nil {
@@ -164,12 +167,16 @@ func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, custo
 
 }
 
+func (m *MqttChat) TransmitWithFlags(out string, cmdUuid string, clientUuid string, flags uint32) {
+	m.transmit(out, cmdUuid, clientUuid, "", 0)
+}
+
 func (m *MqttChat) TransmitWithPrompt(out string, cmdUuid string, clientUuid string, customPrompt string) {
-	m.transmit(out, cmdUuid, clientUuid, customPrompt)
+	m.transmit(out, cmdUuid, clientUuid, customPrompt, 0)
 }
 
 func (m *MqttChat) Transmit(out string, cmdUuid string, clientUuid string) {
-	m.transmit(out, cmdUuid, clientUuid, "")
+	m.transmit(out, cmdUuid, clientUuid, "", 0)
 }
 
 func decodeData(dataraw []byte) []byte {
