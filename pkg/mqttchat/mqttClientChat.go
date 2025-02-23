@@ -36,16 +36,12 @@ type MqttClientChat struct {
 	printPromptManually bool               // Whether to print the prompt manually
 	historyFile         string             // Path to the history file
 	historyLimit        int                // Maximum number of entries in the history file
+	currentServerPath   string             // Current server path
 }
 
 // print prints the given arguments to the readline output.
 func (m *MqttClientChat) print(a ...interface{}) (n int, err error) {
 	return fmt.Fprint(m.rl.Stdout(), a...)
-}
-
-// println prints a newline to the readline output.
-func (m *MqttClientChat) println() (n int, err error) {
-	return fmt.Fprintln(m.rl.Stdout())
 }
 
 // printf prints formatted text to the readline output.
@@ -60,18 +56,41 @@ func (m *MqttClientChat) printWithoutLn(a ...interface{}) (n int, err error) {
 
 // IsDataInvalid checks if the received MQTT data is invalid.
 func (m *MqttClientChat) IsDataInvalid(data MqttJsonData) bool {
-	return data.CmdUUID == "" || data.Cmd == "" || data.Data == "" || data.ClientUUID != m.uuid
+	// Check if the message is for this client
+	if data.ClientUUID != m.uuid {
+		return true
+	}
+
+	// Check if the message has a valid CmdUUID
+	if data.CmdUUID == "" {
+		return true
+	}
+
+	return false
+}
+
+// IsServerConnected checks if the MQTT client is connected to the server.
+func (m *MqttClientChat) IsServerConnected() bool {
+	return m.worker.GetMqttClient().IsConnected()
 }
 
 // OnDataRx handles incoming MQTT data.
 func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
-	if m.IsDataInvalid(data) {
+	if !m.IsServerConnected() {
+		m.print("Server disconnected. Please reconnect.\n")
 		return
 	}
+
+	if m.IsDataInvalid(data) {
+		log.Debugf("Invalid message received: ClientUUID=%s, CmdUUID=%s", data.ClientUUID, data.CmdUUID)
+		return
+	}
+
 	out := strings.TrimSuffix(data.Data, "\n") // Remove newline
+	out = strings.TrimSpace(out)
 	m.customPrompt = data.CustomPrompt
-	m.print(out)
-	m.println()
+	m.currentServerPath = data.CurrentPath
+	m.print(out + "\n")
 	m.printPrompt()
 }
 
@@ -84,6 +103,7 @@ func (m *MqttClientChat) waitServerCb(data MqttJsonData) {
 	m.waitServerChan <- true
 	ip := data.Ip
 	serverVersion := data.Version
+	m.currentServerPath = data.CurrentPath
 	m.printLogin(ip, serverVersion)
 }
 
@@ -99,6 +119,18 @@ func (m *MqttClientChat) printPrompt() {
 		} else {
 			m.printWithoutLn(p)
 		}
+	} else {
+		rlprompt := m.currentServerPath + " "
+		if m.customPrompt == "" {
+			rlprompt += prompt + " "
+		} else {
+			rlprompt += m.customPrompt + " "
+		}
+		if m.enableColor {
+			rlprompt = fmt.Sprintf("%s%s%s", RED, rlprompt, NC) // Apply red color to the prompt
+
+		}
+		m.rl.SetPrompt(rlprompt)
 	}
 }
 
@@ -121,7 +153,7 @@ func (m *MqttClientChat) waitServer() {
 				return
 			}
 		case <-time.After(5 * time.Second):
-			log.Info("TIMEOUT , retry...")
+			log.Info("Server not responding. Retrying...")
 		}
 	}
 }

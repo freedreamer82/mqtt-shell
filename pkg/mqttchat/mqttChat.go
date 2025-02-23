@@ -34,6 +34,7 @@ type MqttJsonData struct {
 	Datetime     string `json:"datetime"`
 	CustomPrompt string `json:"customprompt"`
 	Flags        uint32 `json:"flags"`
+	CurrentPath  string `json:"currentpath"`
 }
 
 type OnDataCallback func(data MqttJsonData)
@@ -145,7 +146,9 @@ func (m *MqttChat) getIpAddress() string {
 //	return nil
 //}
 
-func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, customPrompt string, flags uint32) {
+func (m *MqttChat) transmit(out string,
+	cmdUuid string, clientUuid string,
+	customPrompt string, flags uint32, path string) {
 
 	if cmdUuid == "" {
 		//generate one random..
@@ -154,7 +157,7 @@ func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, custo
 
 	now := time.Now().Format(time.DateTime)
 	reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, CmdUUID: cmdUuid,
-		ClientUUID: clientUuid, CustomPrompt: customPrompt, Flags: flags}
+		ClientUUID: clientUuid, CustomPrompt: customPrompt, Flags: flags, CurrentPath: path}
 
 	b, err := json.Marshal(reply)
 	if err != nil {
@@ -167,16 +170,24 @@ func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, custo
 
 }
 
-func (m *MqttChat) TransmitWithFlags(out string, cmdUuid string, clientUuid string, flags uint32) {
-	m.transmit(out, cmdUuid, clientUuid, "", 0)
-}
-
-func (m *MqttChat) TransmitWithPrompt(out string, cmdUuid string, clientUuid string, customPrompt string) {
-	m.transmit(out, cmdUuid, clientUuid, customPrompt, 0)
-}
-
+// Transmit sends a message to the client without additional options.
 func (m *MqttChat) Transmit(out string, cmdUuid string, clientUuid string) {
-	m.transmit(out, cmdUuid, clientUuid, "", 0)
+	m.transmit(out, cmdUuid, clientUuid, "", 0, "")
+}
+
+// TransmitWithFlags sends a message to the client with custom flags.
+func (m *MqttChat) TransmitWithFlags(out string, cmdUuid string, clientUuid string, flags uint32) {
+	m.transmit(out, cmdUuid, clientUuid, "", flags, "")
+}
+
+// TransmitWithPrompt sends a message to the client with a custom prompt.
+func (m *MqttChat) TransmitWithPrompt(out string, cmdUuid string, clientUuid string, customPrompt string) {
+	m.transmit(out, cmdUuid, clientUuid, customPrompt, 0, "")
+}
+
+// TransmitWithPath sends a message to the client with the current path.
+func (m *MqttChat) TransmitWithPath(out string, cmdUuid string, clientUuid string, currentPath string) {
+	m.transmit(out, cmdUuid, clientUuid, "", 0, currentPath)
 }
 
 func decodeData(dataraw []byte) []byte {
