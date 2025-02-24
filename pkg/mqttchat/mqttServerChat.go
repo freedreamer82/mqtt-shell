@@ -392,7 +392,9 @@ func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string
 	}
 
 	dir, prefix := m.parseInputPath(partialInput)
-	return m.listFilesInDir(dir, prefix)
+	out := m.listFilesInDir(dir, prefix)
+	fmt.Print(out)
+	return out
 }
 
 func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
@@ -435,31 +437,35 @@ func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
 
 	return strings.Join(options, "\n")
 }
+
 func (m *MqttServerChat) parseInputPath(partialInput string) (dir, prefix string) {
+	// Se l'input inizia con "/", è un path assoluto
 	if strings.HasPrefix(partialInput, "/") {
-		// Handle absolute paths
 		dir = filepath.Dir(partialInput)
 		prefix = filepath.Base(partialInput)
 
-		// Check if the path exists and is a directory
+		// Se il path esiste ed è una directory, lista i contenuti senza prefisso
 		if fileInfo, err := os.Stat(partialInput); err == nil && fileInfo.IsDir() {
-			// If the path is a directory, list its contents without filtering by prefix
 			dir = partialInput
 			prefix = ""
 		}
-	} else {
-		// Handle relative paths
+	} else if strings.Contains(partialInput, " ") {
+		// Se l'input contiene spazi, è un comando con un path relativo
 		parts := strings.SplitN(partialInput, " ", 2)
 		if len(parts) < 2 {
-			dir = "./" // Default to current directory
+			dir = "./"
 		} else {
 			dir = filepath.Join(m.currentDir, filepath.Dir(parts[1]))
 			prefix = filepath.Base(parts[1])
 		}
+	} else {
+		// Se l'input non è un path, cerca nella directory corrente
+		dir = m.currentDir
+		prefix = partialInput
 	}
 
 	if dir == "" {
-		dir = "./" // Fallback to current directory
+		dir = "./"
 	}
 
 	return dir, prefix

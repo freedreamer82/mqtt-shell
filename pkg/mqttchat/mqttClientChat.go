@@ -102,7 +102,7 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 		m.autocompleteChan <- optionList
 	} else {
 		// Handle normal output
-		m.print(out)
+		m.print(out + "\n")
 		m.printPrompt()
 	}
 
@@ -420,13 +420,16 @@ type dynamicCompleter struct {
 */
 
 func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	if pos < 0 || pos > len(line) { // Ensure pos is valid
+		return nil, 0
+	}
+
 	options := d.getOptions(string(line))
 	var result [][]rune
 	for _, opt := range options {
 		result = append(result, []rune(opt))
 	}
 
-	// Calcola il prefisso comune
 	if len(result) > 0 {
 		commonPrefix := result[0]
 		for _, opt := range result {
@@ -486,11 +489,8 @@ func (m *MqttClientChat) setupDynamicAutocompletion() readline.AutoCompleter {
 		getOptions: func(line string) []string {
 			// Estrai la parte del percorso dopo il comando (ad esempio, dopo "ls ")
 			parts := strings.SplitN(line, " ", 2)
-			if len(parts) < 2 {
-				// Se non c'è uno spazio, considera il percorso come vuoto (directory corrente)
-				parts = append(parts, ".")
-			}
-			pathPart := strings.TrimSpace(parts[1])
+			//last word
+			pathPart := strings.TrimSpace(parts[len(parts)-1])
 
 			// Svuota il canale prima di inviare una nuova richiesta
 			for len(m.autocompleteChan) > 0 {
