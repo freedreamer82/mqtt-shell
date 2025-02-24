@@ -292,7 +292,7 @@ const (
 	MoreOptionsIndicator = "..." // Indicatore per opzioni aggiuntive
 )
 
-func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string {
+/* func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string {
 	var pathPart string
 
 	if partialInput == "" {
@@ -383,4 +383,84 @@ func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string
 
 	print(strings.Join(options, "\n"))
 	return strings.Join(options, "\n")
+}
+*/
+
+func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string {
+	if partialInput == "" {
+		return m.listFilesInDir(m.currentDir, "")
+	}
+
+	dir, prefix := m.parseInputPath(partialInput)
+	return m.listFilesInDir(dir, prefix)
+}
+
+func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Sprintf("Error reading directory: %s", err)
+	}
+
+	var options []string
+	var foundDir bool
+
+	for _, file := range files {
+		if !strings.HasPrefix(file.Name(), ".") && strings.HasPrefix(file.Name(), prefix) {
+			filePath := filepath.Join(dir, file.Name())
+			fileInfo, err := os.Stat(filePath)
+			if err != nil {
+				continue
+			}
+
+			if fileInfo.IsDir() {
+				if prefix == file.Name() {
+					return "/"
+				}
+				options = append(options, strings.TrimPrefix(file.Name(), prefix)+"/")
+				foundDir = true
+			} else {
+				options = append(options, strings.TrimPrefix(file.Name(), prefix))
+			}
+
+			if len(options) >= MaxOptionsSize {
+				options = append(options, MoreOptionsIndicator)
+				break
+			}
+		}
+	}
+
+	if len(options) == 1 && foundDir {
+		return options[0]
+	}
+
+	return strings.Join(options, "\n")
+}
+func (m *MqttServerChat) parseInputPath(partialInput string) (dir, prefix string) {
+	if strings.HasPrefix(partialInput, "/") {
+		// Handle absolute paths
+		dir = filepath.Dir(partialInput)
+		prefix = filepath.Base(partialInput)
+
+		// Check if the path exists and is a directory
+		if fileInfo, err := os.Stat(partialInput); err == nil && fileInfo.IsDir() {
+			// If the path is a directory, list its contents without filtering by prefix
+			dir = partialInput
+			prefix = ""
+		}
+	} else {
+		// Handle relative paths
+		parts := strings.SplitN(partialInput, " ", 2)
+		if len(parts) < 2 {
+			dir = "./" // Default to current directory
+		} else {
+			dir = filepath.Join(m.currentDir, filepath.Dir(parts[1]))
+			prefix = filepath.Base(parts[1])
+		}
+	}
+
+	if dir == "" {
+		dir = "./" // Fallback to current directory
+	}
+
+	return dir, prefix
 }
