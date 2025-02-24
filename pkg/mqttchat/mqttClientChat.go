@@ -37,6 +37,8 @@ type MqttClientChat struct {
 	historyFile         string             // Path to the history file
 	historyLimit        int                // Maximum number of entries in the history file
 	currentServerPath   string             // Current server path
+	autocompleteChan    chan []string      // Channel for autocompletion options
+
 }
 
 // print prints the given arguments to the readline output.
@@ -90,8 +92,20 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 	out = strings.TrimSpace(out)
 	m.customPrompt = data.CustomPrompt
 	m.currentServerPath = data.CurrentPath
-	m.print(out + "\n")
-	m.printPrompt()
+
+	if strings.HasPrefix(out, "autocomplete:") {
+		// Handle autocompletion response
+		options := strings.TrimPrefix(out, "autocomplete:")
+		optionList := strings.Split(options, "\n")
+
+		// Send the options to the autocompletion channel
+		m.autocompleteChan <- optionList
+	} else {
+		// Handle normal output
+		m.print(out)
+		m.printPrompt()
+	}
+
 }
 
 // waitServerCb is the callback for waiting for the server response.
@@ -169,13 +183,14 @@ func (m *MqttClientChat) clientTask() {
 	m.waitServer()
 
 	// Add a listener to intercept the Tab key
-	m.rl.Config.SetListener(func(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
+	/* 	m.rl.Config.SetListener(func(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
 		if key == '\t' { // Intercept the Tab key
-			fmt.Print("Tab not supported , sorry")
+			//	fmt.Print("Tab not supported , sorry")
+			m.Transmit(fmt.Sprintf("autocomplete %s", string(line)), "", m.uuid)
 			return nil, 0, false // Stop input
 		}
 		return line, pos, true // Continue input
-	})
+	}) */
 
 	for {
 		m.printPrompt()
@@ -274,7 +289,7 @@ func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string,
 		Prompt:          promptColor,
 		HistoryFile:     cc.historyFile,
 		HistoryLimit:    cc.historyLimit,
-		AutoComplete:    nil,
+		AutoComplete:    cc.setupDynamicAutocompletion(),
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
 		FuncIsTerminal: func() bool {
@@ -357,4 +372,143 @@ func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txT
 	go cc.clientTask()
 
 	return &cc
+}
+
+/* func (m *MqttClientChat) setupDynamicAutocompletion() readline.AutoCompleter {
+	m.autocompleteChan = make(chan []string, 100)
+
+	completer := readline.NewPrefixCompleter(
+		readline.PcItemDynamic(func(line string) []string {
+			// Estrai la parte del percorso dopo il comando (ad esempio, dopo "ls ")
+			parts := strings.SplitN(line, " ", 2)
+			if len(parts) < 2 {
+				// Se non c'è uno spazio, considera il percorso come vuoto (directory corrente)
+				parts = append(parts, ".")
+			}
+			pathPart := strings.TrimSpace(parts[1])
+
+			// Invia solo la parte del percorso al server
+			m.Transmit(fmt.Sprintf("autocomplete %s", pathPart), "", m.uuid)
+
+			// Attendi le opzioni dal server
+			select {
+			case options := <-m.autocompleteChan:
+				return options
+			case <-time.After(2 * time.Second): // Timeout dopo 2 secondi
+				return []string{}
+			}
+		}),
+	)
+
+	return completer
+}
+*/
+
+type dynamicCompleter struct {
+	getOptions func(line string) []string
+}
+
+/*
+	 func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+		options := d.getOptions(string(line))
+		var result [][]rune
+		for _, opt := range options {
+			result = append(result, []rune(opt))
+		}
+		return result, 0 //len(line)
+	}
+*/
+
+func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	options := d.getOptions(string(line))
+	var result [][]rune
+	for _, opt := range options {
+		result = append(result, []rune(opt))
+	}
+
+	// Calcola il prefisso comune
+	if len(result) > 0 {
+		commonPrefix := result[0]
+		for _, opt := range result {
+			commonPrefix = commonPrefix[:commonPrefixLength(commonPrefix, opt)]
+		}
+		length = len(commonPrefix)
+	} else {
+		length = 0
+	}
+
+	return result, length
+}
+
+// Funzione per calcolare la lunghezza del prefisso comune tra due slice di rune
+func commonPrefixLength(a, b []rune) int {
+	minLength := len(a)
+	if len(b) < minLength {
+		minLength = len(b)
+	}
+	for i := 0; i < minLength; i++ {
+		if a[i] != b[i] {
+			return i
+		}
+	}
+	return minLength
+}
+
+/*
+func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
+	// Converte il runes in string
+	input := string(line)
+	// Ottiene le opzioni di completamento
+	options := d.getOptions(input)
+	var result [][]rune
+
+	// Elimina il comando dalla riga di input
+	parts := strings.Fields(input)
+	if len(parts) > 1 {
+		// Solo se ci sono più parti, consideriamo il percorso
+		pathPart := strings.TrimSpace(parts[1])
+		// Confronta le opzioni con il percorso parziale
+		for _, opt := range options {
+			if strings.HasPrefix(opt, pathPart) { // Controlla se l'opzione inizia con il percorso
+				result = append(result, []rune(opt)) // Aggiungi solo l'opzione se corrisponde
+			}
+		}
+	}
+
+	return result, len(line)
+}
+*/
+
+func (m *MqttClientChat) setupDynamicAutocompletion() readline.AutoCompleter {
+	m.autocompleteChan = make(chan []string, 100)
+
+	completer := &dynamicCompleter{
+		getOptions: func(line string) []string {
+			// Estrai la parte del percorso dopo il comando (ad esempio, dopo "ls ")
+			parts := strings.SplitN(line, " ", 2)
+			if len(parts) < 2 {
+				// Se non c'è uno spazio, considera il percorso come vuoto (directory corrente)
+				parts = append(parts, ".")
+			}
+			pathPart := strings.TrimSpace(parts[1])
+
+			// Svuota il canale prima di inviare una nuova richiesta
+			for len(m.autocompleteChan) > 0 {
+				<-m.autocompleteChan
+			}
+
+			// Invia solo la parte del percorso al server
+			m.Transmit(fmt.Sprintf("autocomplete %s", pathPart), "", m.uuid)
+
+			// Attendi le opzioni dal server
+			select {
+			case options := <-m.autocompleteChan:
+				return options
+			case <-time.After(5 * time.Second): // Timeout dopo 2 secondi
+				return []string{}
+			}
+		},
+	}
+
+	return completer
 }
