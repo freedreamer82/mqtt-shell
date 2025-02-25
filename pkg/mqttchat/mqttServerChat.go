@@ -69,7 +69,6 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 
 		// Execute the command in the server's current directory context
 		out := m.execShellCommand(str)
-
 		// Send the response with the server's current path
 		m.TransmitWithPath(out, data.CmdUUID, data.ClientUUID, m.currentDir)
 	}
@@ -439,18 +438,32 @@ func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
 }
 
 func (m *MqttServerChat) parseInputPath(partialInput string) (dir, prefix string) {
-	// Se l'input inizia con "/", è un path assoluto
 	if strings.HasPrefix(partialInput, "/") {
+		// Handle absolute paths
 		dir = filepath.Dir(partialInput)
 		prefix = filepath.Base(partialInput)
 
-		// Se il path esiste ed è una directory, lista i contenuti senza prefisso
+		// Check if the path exists and is a directory
 		if fileInfo, err := os.Stat(partialInput); err == nil && fileInfo.IsDir() {
+			// If the path is a directory, list its contents without filtering by prefix
 			dir = partialInput
 			prefix = ""
 		}
+	} else if strings.Contains(partialInput, "/") {
+		// Handle relative paths (e.g., "B/C")
+		// Split into directory and prefix
+		lastSlashIndex := strings.LastIndex(partialInput, "/")
+		dir = filepath.Join(m.currentDir, partialInput[:lastSlashIndex])
+		prefix = partialInput[lastSlashIndex+1:]
+
+		// Check if the directory exists
+		if fileInfo, err := os.Stat(dir); err != nil || !fileInfo.IsDir() {
+			// If the directory doesn't exist, treat the entire input as a prefix
+			dir = m.currentDir
+			prefix = partialInput
+		}
 	} else if strings.Contains(partialInput, " ") {
-		// Se l'input contiene spazi, è un comando con un path relativo
+		// Handle commands with relative paths (e.g., "cd documents")
 		parts := strings.SplitN(partialInput, " ", 2)
 		if len(parts) < 2 {
 			dir = "./"
@@ -459,7 +472,7 @@ func (m *MqttServerChat) parseInputPath(partialInput string) (dir, prefix string
 			prefix = filepath.Base(parts[1])
 		}
 	} else {
-		// Se l'input non è un path, cerca nella directory corrente
+		// Handle local file completion (e.g., "file.txt")
 		dir = m.currentDir
 		prefix = partialInput
 	}
