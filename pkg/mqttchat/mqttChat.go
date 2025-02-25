@@ -19,6 +19,12 @@ import (
 
 const defaultTimeoutCmd = 5 * time.Second
 
+const (
+	MSG_DATA_TYPE_CMD_WHO_AM_I     string = "whoami"
+	MSG_DATA_TYPE_CMD_SHELL        string = "shell"
+	MSG_DATA_TYPE_CMD_AUTOCOMPLETE string = "autocomplete"
+)
+
 type SubScribeMessage struct {
 	Topic string
 	Qos   byte
@@ -55,6 +61,63 @@ type MqttChat struct {
 	startTime          time.Time
 	isRunning          bool
 	netInterface       string
+}
+
+// Costruttore con tutti i campi
+func NewMqttJsonData(ip, version, cmd, data, cmdUUID, clientUUID, datetime, customPrompt string, flags uint32, currentPath string) *MqttJsonData {
+	return &MqttJsonData{
+		Ip:           ip,
+		Version:      version,
+		Cmd:          cmd,
+		Data:         data,
+		CmdUUID:      cmdUUID,
+		ClientUUID:   clientUUID,
+		Datetime:     datetime,
+		CustomPrompt: customPrompt,
+		Flags:        flags,
+		CurrentPath:  currentPath,
+	}
+}
+
+func NewMqttJsonDataEmpty() *MqttJsonData {
+	return &MqttJsonData{
+		Ip:           "",
+		Version:      "",
+		Cmd:          MSG_DATA_TYPE_CMD_SHELL,
+		Data:         "",
+		CmdUUID:      shortuuid.New(),
+		ClientUUID:   "",
+		Datetime:     "",
+		CustomPrompt: "",
+		Flags:        0,
+		CurrentPath:  "",
+	}
+}
+
+// Transmit che prende un puntatore a MqttJsonData
+func (m *MqttChat) Transmit(data *MqttJsonData) {
+	m.transmit(data.Data, data.CmdUUID, data.ClientUUID, data.CustomPrompt, data.Flags, data.CurrentPath, data.Cmd)
+}
+
+// Funzione transmit privata
+func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, customPrompt string, flags uint32, path string, dataCmd string) {
+	if cmdUuid == "" {
+		//generate one random..
+		cmdUuid = shortuuid.New()
+	}
+
+	now := time.Now().Format(time.DateTime)
+	reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: dataCmd, Datetime: now, CmdUUID: cmdUuid,
+		ClientUUID: clientUuid, CustomPrompt: customPrompt, Flags: flags, CurrentPath: path}
+
+	b, err := json.Marshal(reply)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	encodedString := base64.StdEncoding.EncodeToString(b)
+	m.worker.Publish(m.txTopic, encodedString)
 }
 
 func (m *MqttChat) SetDataCallback(cb OnDataCallback) {
@@ -106,92 +169,6 @@ func (m *MqttChat) getIpAddress() string {
 
 	return ""
 
-}
-
-//func (m *MqttChat) subscribeMessagesToBroker() error {
-//	client := m.worker.GetMqttClient()
-//	if m.rxTopic != "" {
-//		// Go For MQTT Publish
-//		log.Infof("Sub topic %s, Qos: %d", m.rxTopic, mqttQOS)
-//		if token := client.Subscribe(m.rxTopic, mqttQOS, m.onBrokerData); token.Error() != nil {
-//			// Return Error
-//			return token.Error()
-//		}
-//	}
-//	if m.beaconRequestTopic != "" {
-//		// Go For MQTT Publish
-//		log.Infof("Sub topic %s, Qos: %d", m.beaconRequestTopic, mqttQOS)
-//		if token := client.Subscribe(m.beaconRequestTopic, mqttQOS, m.onBeaconRequest); token.Error() != nil {
-//			// Return Error
-//			return token.Error()
-//		}
-//	}
-//	return nil
-//}
-//
-//func (m *MqttChat) unsubscribeMessagesToBroker() error {
-//	client := m.worker.GetMqttClient()
-//	if m.rxTopic != "" {
-//		// Go For MQTT Publish
-//		log.Infof("UnSub topic %s, Qos: %d", m.rxTopic, mqttQOS)
-//		if token := client.Unsubscribe(m.rxTopic); token.Error() != nil {
-//			// Return Error
-//			return token.Error()
-//		}
-//	}
-//	if m.beaconRequestTopic != "" {
-//		// Go For MQTT Publish
-//		log.Infof("UnSub topic %s, Qos: %d", m.beaconRequestTopic, mqttQOS)
-//		if token := client.Unsubscribe(m.beaconRequestTopic); token.Error() != nil {
-//			// Return Error
-//			return token.Error()
-//		}
-//	}
-//	return nil
-//}
-
-func (m *MqttChat) transmit(out string,
-	cmdUuid string, clientUuid string,
-	customPrompt string, flags uint32, path string) {
-
-	if cmdUuid == "" {
-		//generate one random..
-		cmdUuid = shortuuid.New()
-	}
-
-	now := time.Now().Format(time.DateTime)
-	reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Data: out, Cmd: "shell", Datetime: now, CmdUUID: cmdUuid,
-		ClientUUID: clientUuid, CustomPrompt: customPrompt, Flags: flags, CurrentPath: path}
-
-	b, err := json.Marshal(reply)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	encodedString := base64.StdEncoding.EncodeToString(b)
-	m.worker.Publish(m.txTopic, encodedString)
-
-}
-
-// Transmit sends a message to the client without additional options.
-func (m *MqttChat) Transmit(out string, cmdUuid string, clientUuid string) {
-	m.transmit(out, cmdUuid, clientUuid, "", 0, "")
-}
-
-// TransmitWithFlags sends a message to the client with custom flags.
-func (m *MqttChat) TransmitWithFlags(out string, cmdUuid string, clientUuid string, flags uint32) {
-	m.transmit(out, cmdUuid, clientUuid, "", flags, "")
-}
-
-// TransmitWithPrompt sends a message to the client with a custom prompt.
-func (m *MqttChat) TransmitWithPrompt(out string, cmdUuid string, clientUuid string, customPrompt string, flags uint32) {
-	m.transmit(out, cmdUuid, clientUuid, customPrompt, flags, "")
-}
-
-// TransmitWithPath sends a message to the client with the current path.
-func (m *MqttChat) TransmitWithPath(out string, cmdUuid string, clientUuid string, currentPath string, flags uint32, prompt string) {
-	m.transmit(out, cmdUuid, clientUuid, prompt, flags, currentPath)
 }
 
 func decodeData(dataraw []byte) []byte {

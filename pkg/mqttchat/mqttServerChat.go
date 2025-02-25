@@ -19,14 +19,33 @@ const (
 	inactivityTimeout = 5 * time.Minute // Timeout for client inactivity
 )
 
+const MaxOptionsSize = 90
+
+// ClientState represents the state of a connected client.
+type ClientState struct {
+	ClientUUID string    // UUID of the client
+	CurrentDir string    // Current directory of the client
+	PluginId   string    // Active plugin ID (if any)
+	LastActive time.Time // Last activity time of the client
+}
+
 // MqttServerChat represents the MQTT server chat with plugin support and directory context.
 type MqttServerChat struct {
 	*MqttChat
-	plugins      []MqttSeverChatPlugin // List of plugins
-	pluginMap    sync.Map              // Map to store plugin states
-	outputChan   chan OutMessage       // Channel for outgoing messages
-	currentDir   string                // Current directory of the server
-	lastActivity sync.Map              // Map to store last activity time for each client
+	plugins           []MqttSeverChatPlugin // List of plugins
+	pluginMap         sync.Map              // Map to store plugin states
+	outputChan        chan OutMessage       // Channel for outgoing messages
+	clientStates      sync.Map              // Map to store client states
+	currentDir        string                // Default directory for the server
+	inactivityTimeout time.Duration         // Timeout for client inactivity
+}
+
+func (m *MqttServerChat) GetInactivityTimeout() time.Duration {
+	return m.inactivityTimeout
+}
+
+func (m *MqttServerChat) SetInactivityTimeout(timeout time.Duration) {
+	m.inactivityTimeout = timeout
 }
 
 // MqttServerChatOption defines a function type for configuring the MQTT server chat.
@@ -38,8 +57,17 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 		return
 	}
 
+	// Get or create the client state
+	clientState, _ := m.clientStates.LoadOrStore(data.ClientUUID, &ClientState{
+		ClientUUID: data.ClientUUID, // Include the client UUID
+		CurrentDir: m.currentDir,    // Default to server's current directory
+		LastActive: time.Now(),
+	})
+
+	state := clientState.(*ClientState)
+
 	// Update the last activity time for the client
-	m.lastActivity.Store(data.ClientUUID, time.Now())
+	state.LastActive = time.Now()
 
 	str := fmt.Sprintf("%s", data.Data)
 
@@ -52,30 +80,39 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 	}
 
 	// Check if the command is an autocomplete request
-	if data.Flags&FLAG_MASK_AUTOCOMPLETE > 0 {
+	if data.Cmd == MSG_DATA_TYPE_CMD_AUTOCOMPLETE {
 		partialInput := str
-		options := m.generateAutocompleteOptions(partialInput)
-		m.TransmitWithPath(options, data.CmdUUID, data.ClientUUID, m.currentDir, FLAG_MASK_AUTOCOMPLETE, "")
+		options := m.generateAutocompleteOptions(partialInput, state.CurrentDir)
+		data := NewMqttJsonDataEmpty()
+		data.Data = options
+		data.CmdUUID = data.CmdUUID
+		data.ClientUUID = state.ClientUUID
+		data.CurrentPath = state.CurrentDir
+		data.Cmd = MSG_DATA_TYPE_CMD_AUTOCOMPLETE
+		m.Transmit(data)
+
 		return
 	}
 
 	// Check if the client has an active plugin
-	pluginId, hasPluginActive := m.hasActivePlugin(data.ClientUUID)
-	if hasPluginActive {
-		m.execPluginCommand(pluginId, data)
+	if state.PluginId != "" {
+		m.execPluginCommand(state.PluginId, data)
 		return
 	}
 
-	// Execute the command in the server's current directory context
-	out := m.execShellCommand(str)
-	// Send the response with the server's current path
-	m.TransmitWithPath(out, data.CmdUUID, data.ClientUUID, m.currentDir, 0, "")
-
+	// Execute the command in the client's current directory context
+	out := m.execShellCommand(str, state)
+	data2send := NewMqttJsonDataEmpty()
+	data2send.Data = out
+	data2send.CmdUUID = data.CmdUUID
+	data2send.ClientUUID = state.ClientUUID
+	data2send.CurrentPath = state.CurrentDir
+	m.Transmit(data2send)
+	//m.TransmitWithPath(out, data.CmdUUID, state.ClientUUID, state.CurrentDir, 0, "")
 }
 
-// execShellCommand executes a shell command in the server's current directory context.
-func (m *MqttServerChat) execShellCommand(cmd string) string {
-
+// execShellCommand executes a shell command in the client's current directory context.
+func (m *MqttServerChat) execShellCommand(cmd string, state *ClientState) string {
 	// Handle the "cd" command to change directory
 	if strings.HasPrefix(cmd, "cd ") {
 		dir := strings.TrimSpace(cmd[3:])
@@ -83,10 +120,10 @@ func (m *MqttServerChat) execShellCommand(cmd string) string {
 		if err != nil {
 			return fmt.Sprintf("error: %v\n", err)
 		}
-		// Update the server's current directory
-		m.currentDir, _ = os.Getwd()
-		log.Printf("Changed directory to: %s\n", m.currentDir)
-		return fmt.Sprintf("Changed directory to %s\n", m.currentDir)
+		// Update the client's current directory
+		state.CurrentDir, _ = os.Getwd()
+		log.Printf("Client %s changed directory to: %s\n", state.ClientUUID, state.CurrentDir)
+		return fmt.Sprintf("Changed directory to %s\n", state.CurrentDir)
 	}
 
 	// Execute the command using the shell
@@ -111,7 +148,7 @@ func NewOutMessage(msg, clientUUID, cmdUUID string) OutMessage {
 // NewOutMessageWithPrompt creates a new OutMessage with a custom prompt.
 func NewOutMessageWithPrompt(msg, clientUUID, cmdUUID, prompt string) OutMessage {
 	return OutMessage{
-		msg:        msg, // fmt.Sprintf("[%s] %s", prompt, msg), // Include the prompt in the message
+		msg:        msg,
 		clientUUID: clientUUID,
 		cmdUUID:    cmdUUID,
 		prompt:     prompt,
@@ -133,7 +170,7 @@ func NewServerChat(mqttOpts *MQTT.ClientOptions, topics ServerTopic, version str
 	chat.SetDataCallback(sc.OnDataRx)
 	sc.MqttChat = chat
 	sc.outputChan = make(chan OutMessage, outputMsgSize)
-
+	sc.inactivityTimeout = inactivityTimeout
 	// Initialize the server's current directory
 	sc.currentDir, _ = os.Getwd()
 
@@ -160,7 +197,19 @@ func (m *MqttServerChat) mqttTransmit() {
 		case out := <-m.outputChan:
 			outMsg := out.msg
 			if outMsg != "" {
-				m.TransmitWithPath(outMsg, out.cmdUUID, out.clientUUID, m.currentDir, 0, out.prompt)
+				// Retrieve the client state
+				if state, ok := m.clientStates.Load(out.clientUUID); ok {
+					clientState := state.(*ClientState)
+					data := NewMqttJsonDataEmpty()
+					data.Data = outMsg
+					data.CmdUUID = out.cmdUUID
+					data.ClientUUID = clientState.ClientUUID
+					data.CurrentPath = clientState.CurrentDir
+					data.CustomPrompt = out.prompt
+					m.Transmit(data)
+
+					//m.TransmitWithPath(outMsg, out.cmdUUID, clientState.ClientUUID, clientState.CurrentDir, 0, out.prompt)
+				}
 			}
 		}
 	}
@@ -171,13 +220,12 @@ func (m *MqttServerChat) monitorInactivity() {
 	for {
 		time.Sleep(1 * time.Minute) // Check every minute
 		now := time.Now()
-		m.lastActivity.Range(func(key, value interface{}) bool {
-			clientUUID := key.(string)
-			lastActive := value.(time.Time)
-			if now.Sub(lastActive) > inactivityTimeout {
+		m.clientStates.Range(func(key, value interface{}) bool {
+			state := value.(*ClientState)
+			if now.Sub(state.LastActive) > m.inactivityTimeout {
 				// Remove inactive client
-				m.lastActivity.Delete(clientUUID)
-				log.Printf("Client %s removed due to inactivity\n", clientUUID)
+				m.clientStates.Delete(state.ClientUUID)
+				log.Printf("Client %s removed due to inactivity\n", state.ClientUUID)
 			}
 			return true
 		})
@@ -207,22 +255,18 @@ func WithOptionNetworkInterface(netI string) MqttServerChatOption {
 	}
 }
 
-const (
-	MaxOptionsSize       = 90    // Dimensione massima di options
-	MoreOptionsIndicator = "..." // Indicatore per opzioni aggiuntive
-)
-
-func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string {
+// generateAutocompleteOptions generates autocomplete options for a given input.
+func (m *MqttServerChat) generateAutocompleteOptions(partialInput string, currentDir string) string {
 	if partialInput == "" {
-		return m.listFilesInDir(m.currentDir, "")
+		return m.listFilesInDir(currentDir, "")
 	}
 
-	dir, prefix := m.parseInputPath(partialInput)
+	dir, prefix := m.parseInputPath(partialInput, currentDir)
 	out := m.listFilesInDir(dir, prefix)
-	//	fmt.Print(out)
 	return out
 }
 
+// listFilesInDir lists files in a directory with a given prefix.
 func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
 	files, err := os.ReadDir(dir)
 	if err != nil {
@@ -251,7 +295,7 @@ func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
 			}
 
 			if len(options) >= MaxOptionsSize {
-				options = append(options, MoreOptionsIndicator)
+				options = append(options, "...")
 				break
 			}
 		}
@@ -264,7 +308,8 @@ func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
 	return strings.Join(options, "\n")
 }
 
-func (m *MqttServerChat) parseInputPath(partialInput string) (dir, prefix string) {
+// parseInputPath parses the input path for autocomplete.
+func (m *MqttServerChat) parseInputPath(partialInput string, currentDir string) (dir, prefix string) {
 	if strings.HasPrefix(partialInput, "/") {
 		// Handle absolute paths
 		dir = filepath.Dir(partialInput)
@@ -272,35 +317,32 @@ func (m *MqttServerChat) parseInputPath(partialInput string) (dir, prefix string
 
 		// Check if the path exists and is a directory
 		if fileInfo, err := os.Stat(partialInput); err == nil && fileInfo.IsDir() {
-			// If the path is a directory, list its contents without filtering by prefix
 			dir = partialInput
 			prefix = ""
 		}
 	} else if strings.Contains(partialInput, "/") {
-		// Handle relative paths (e.g., "B/C")
-		// Split into directory and prefix
+		// Handle relative paths
 		lastSlashIndex := strings.LastIndex(partialInput, "/")
-		dir = filepath.Join(m.currentDir, partialInput[:lastSlashIndex])
+		dir = filepath.Join(currentDir, partialInput[:lastSlashIndex])
 		prefix = partialInput[lastSlashIndex+1:]
 
 		// Check if the directory exists
 		if fileInfo, err := os.Stat(dir); err != nil || !fileInfo.IsDir() {
-			// If the directory doesn't exist, treat the entire input as a prefix
-			dir = m.currentDir
+			dir = currentDir
 			prefix = partialInput
 		}
 	} else if strings.Contains(partialInput, " ") {
-		// Handle commands with relative paths (e.g., "cd documents")
+		// Handle commands with relative paths
 		parts := strings.SplitN(partialInput, " ", 2)
 		if len(parts) < 2 {
 			dir = "./"
 		} else {
-			dir = filepath.Join(m.currentDir, filepath.Dir(parts[1]))
+			dir = filepath.Join(currentDir, filepath.Dir(parts[1]))
 			prefix = filepath.Base(parts[1])
 		}
 	} else {
-		// Handle local file completion (e.g., "file.txt")
-		dir = m.currentDir
+		// Handle local file completion
+		dir = currentDir
 		prefix = partialInput
 	}
 
@@ -309,4 +351,37 @@ func (m *MqttServerChat) parseInputPath(partialInput string) (dir, prefix string
 	}
 
 	return dir, prefix
+}
+
+// GetClientState retrieves the state of a client.
+func (m *MqttServerChat) GetClientState(clientUUID string) (*ClientState, bool) {
+	state, ok := m.clientStates.Load(clientUUID)
+	if !ok {
+		return nil, false
+	}
+	return state.(*ClientState), true
+}
+
+// SetClientState sets the state of a client.
+func (m *MqttServerChat) SetClientState(clientUUID string, state *ClientState) {
+	m.clientStates.Store(clientUUID, state)
+}
+
+// GetClientsConnected restituisce una mappa dei client attualmente connessi.
+func (m *MqttServerChat) GetClientsConnected() map[string]*ClientState {
+	clients := make(map[string]*ClientState)
+	m.clientStates.Range(func(key, value interface{}) bool {
+		clientUUID := key.(string)
+		state := value.(*ClientState)
+		if time.Since(state.LastActive) <= inactivityTimeout {
+			clients[clientUUID] = state
+		}
+		return true
+	})
+	return clients
+}
+
+// GetClients restituisce l'intera mappa dei client (connessi e non).
+func (m *MqttServerChat) GetClients() *sync.Map {
+	return &m.clientStates
 }

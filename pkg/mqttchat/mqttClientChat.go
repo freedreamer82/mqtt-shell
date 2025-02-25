@@ -94,7 +94,7 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 	m.customPrompt = data.CustomPrompt
 	m.currentServerPath = data.CurrentPath
 
-	if data.Flags&FLAG_MASK_AUTOCOMPLETE > 0 {
+	if data.Cmd == MSG_DATA_TYPE_CMD_AUTOCOMPLETE {
 		options := out
 		optionList := strings.Split(options, "\n")
 
@@ -162,7 +162,11 @@ func (m *MqttClientChat) waitServer() {
 	m.SetDataCallback(m.waitServerCb)
 	for {
 		log.Info("Connecting to server...")
-		m.Transmit("whoami", "", m.uuid)
+		data := NewMqttJsonDataEmpty()
+		data.ClientUUID = m.uuid
+		data.Cmd = MSG_DATA_TYPE_CMD_WHO_AM_I
+		m.Transmit(data)
+
 		select {
 		case ok := <-m.waitServerChan:
 			if ok {
@@ -189,16 +193,6 @@ func (m *MqttClientChat) clearScreen() {
 func (m *MqttClientChat) clientTask() {
 	m.waitServer()
 
-	// Add a listener to intercept the Tab key
-	/* 	m.rl.Config.SetListener(func(line []rune, pos int, key rune) (newLine []rune, newPos int, ok bool) {
-		if key == '\t' { // Intercept the Tab key
-			//	fmt.Print("Tab not supported , sorry")
-			m.Transmit(fmt.Sprintf("autocomplete %s", string(line)), "", m.uuid)
-			return nil, 0, false // Stop input
-		}
-		return line, pos, true // Continue input
-	}) */
-
 	for {
 		m.printPrompt()
 		line, err := m.rl.Readline()
@@ -221,7 +215,10 @@ func (m *MqttClientChat) clientTask() {
 		}
 
 		// Send the command via MQTT
-		m.Transmit(line, "", m.uuid)
+		data := NewMqttJsonDataEmpty()
+		data.ClientUUID = m.uuid
+		data.Data = line
+		m.Transmit(data)
 	}
 }
 
@@ -436,7 +433,11 @@ func (m *MqttClientChat) setupDynamicAutocompletion() readline.AutoCompleter {
 				<-m.autocompleteChan
 			}
 
-			m.TransmitWithFlags(pathPart, "", m.uuid, FLAG_MASK_AUTOCOMPLETE)
+			data := NewMqttJsonDataEmpty()
+			data.ClientUUID = m.uuid
+			data.Data = pathPart
+			data.Cmd = MSG_DATA_TYPE_CMD_AUTOCOMPLETE
+			m.Transmit(data)
 
 			select {
 			case options := <-m.autocompleteChan:
