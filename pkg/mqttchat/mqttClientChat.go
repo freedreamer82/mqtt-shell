@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -156,6 +157,9 @@ func (m *MqttClientChat) printLogin(ip string, serverVersion string) {
 
 // waitServer waits for the server to respond and handles retries.
 func (m *MqttClientChat) waitServer() {
+	signalChan := make(chan os.Signal, 1)
+	signal.Notify(signalChan, os.Interrupt)
+
 	m.SetDataCallback(m.waitServerCb)
 	for {
 		log.Info("Connecting to server...")
@@ -168,6 +172,10 @@ func (m *MqttClientChat) waitServer() {
 			}
 		case <-time.After(5 * time.Second):
 			log.Info("Server not responding. Retrying...")
+		case <-signalChan:
+			log.Info("Interrupt received. Exiting...")
+			os.Exit(-1)
+			return
 		}
 	}
 }
