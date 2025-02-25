@@ -94,9 +94,11 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 	m.customPrompt = data.CustomPrompt
 	m.currentServerPath = data.CurrentPath
 
-	if strings.HasPrefix(out, "autocomplete:") {
+	//if strings.HasPrefix(out, "autocomplete:") {
+	if data.Flags&FLAG_MASK_AUTOCOMPLETE > 0 {
 		// Handle autocompletion response
-		options := strings.TrimPrefix(out, "autocomplete:")
+		//options := strings.TrimPrefix(out, "autocomplete:")
+		options := out
 		optionList := strings.Split(options, "\n")
 
 		// Send the options to the autocompletion channel
@@ -243,7 +245,7 @@ func (m *MqttClientChat) SetHistoryFile(file string, limit int) {
 		Prompt:          prompt,
 		HistoryFile:     m.historyFile,
 		HistoryLimit:    m.historyLimit,
-		AutoComplete:    nil,
+		AutoComplete:    m.setupDynamicAutocompletion(),
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
 		FuncIsTerminal: func() bool {
@@ -360,7 +362,7 @@ func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txT
 		Prompt:          prompt,
 		HistoryFile:     cc.historyFile,
 		HistoryLimit:    cc.historyLimit,
-		AutoComplete:    nil,
+		AutoComplete:    cc.setupDynamicAutocompletion(),
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
 		Stdin:           wrappedReader,
@@ -506,7 +508,8 @@ func (m *MqttClientChat) setupDynamicAutocompletion() readline.AutoCompleter {
 			}
 
 			// Invia solo la parte del percorso al server
-			m.Transmit(fmt.Sprintf("autocomplete %s", pathPart), "", m.uuid)
+			m.TransmitWithFlags(pathPart, "", m.uuid, FLAG_MASK_AUTOCOMPLETE)
+			//m.Transmit(fmt.Sprintf("autocomplete %s", pathPart), "", m.uuid)
 
 			// Attendi le opzioni dal server
 			select {

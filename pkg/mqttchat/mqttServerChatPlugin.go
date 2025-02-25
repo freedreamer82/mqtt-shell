@@ -13,6 +13,7 @@ const pluginHelpText = "Plugin Help: \n" +
 type MqttSeverChatPlugin interface {
 	PluginId() string
 	OnDataRx(data MqttJsonData)
+	GetName() string
 }
 
 func (m *MqttServerChat) isPluginConfigCmd(str string) (bool, []string, int) {
@@ -84,7 +85,7 @@ func (m *MqttServerChat) existPlugin(plugin string) bool {
 func (m *MqttServerChat) hasActivePlugin(clientUUID string) (string, bool) {
 	plugin, ok := m.pluginMap.Load(clientUUID)
 	if ok {
-		return plugin.(string), ok
+		return "<" + plugin.(string) + ">", ok
 	}
 	return "", ok
 }
@@ -92,6 +93,7 @@ func (m *MqttServerChat) hasActivePlugin(clientUUID string) (string, bool) {
 func (m *MqttServerChat) execPluginCommand(pluginId string, data MqttJsonData) {
 	for _, p := range m.plugins {
 		if p.PluginId() == pluginId {
+			data.CustomPrompt = "<" + p.GetName() + ">"
 			p.OnDataRx(data)
 			return
 		}

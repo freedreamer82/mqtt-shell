@@ -34,7 +34,7 @@ type MqttServerChatOption func(*MqttServerChat)
 
 // OnDataRx handles incoming data from clients.
 func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
-	if data.CmdUUID == "" || data.Cmd == "" || data.Data == "" {
+	if data.CmdUUID == "" || data.Cmd == "" {
 		return
 	}
 
@@ -42,36 +42,39 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 	m.lastActivity.Store(data.ClientUUID, time.Now())
 
 	str := fmt.Sprintf("%s", data.Data)
-	if str != "" {
-		// Check if the command is a plugin configuration command
-		isPlugin, args, argsNo := m.isPluginConfigCmd(str)
-		if isPlugin && data.ClientUUID != "" {
-			res, p := m.handlePluginConfigCmd(data.ClientUUID, args, argsNo)
-			m.outputChan <- NewOutMessageWithPrompt(res, data.ClientUUID, data.CmdUUID, p)
-			return
-		}
 
-		// Check if the command is an autocomplete request
-		if strings.HasPrefix(str, "autocomplete ") {
-			// Handle autocomplete request
-			partialInput := strings.TrimPrefix(str, "autocomplete ")
-			options := m.generateAutocompleteOptions(partialInput)
-			m.TransmitWithPath(fmt.Sprintf("autocomplete:%s", options), data.CmdUUID, data.ClientUUID, m.currentDir)
-			return
-		}
-
-		// Check if the client has an active plugin
-		pluginId, hasPluginActive := m.hasActivePlugin(data.ClientUUID)
-		if hasPluginActive {
-			m.execPluginCommand(pluginId, data)
-			return
-		}
-
-		// Execute the command in the server's current directory context
-		out := m.execShellCommand(str)
-		// Send the response with the server's current path
-		m.TransmitWithPath(out, data.CmdUUID, data.ClientUUID, m.currentDir)
+	// Check if the command is a plugin configuration command
+	isPlugin, args, argsNo := m.isPluginConfigCmd(str)
+	if isPlugin && data.ClientUUID != "" {
+		res, p := m.handlePluginConfigCmd(data.ClientUUID, args, argsNo)
+		m.outputChan <- NewOutMessageWithPrompt(res, data.ClientUUID, data.CmdUUID, p)
+		return
 	}
+
+	// Check if the command is an autocomplete request
+	//	if strings.HasPrefix(str, "autocomplete ") {
+	if data.Flags&FLAG_MASK_AUTOCOMPLETE > 0 {
+		// Handle autocomplete request
+		//partialInput := strings.TrimPrefix(str, "autocomplete ")
+		partialInput := str
+		options := m.generateAutocompleteOptions(partialInput)
+		//m.TransmitWithPath(fmt.Sprintf("autocomplete:%s", options), data.CmdUUID, data.ClientUUID, m.currentDir, 0, "")
+		m.TransmitWithPath(options, data.CmdUUID, data.ClientUUID, m.currentDir, FLAG_MASK_AUTOCOMPLETE, "")
+		return
+	}
+
+	// Check if the client has an active plugin
+	pluginId, hasPluginActive := m.hasActivePlugin(data.ClientUUID)
+	if hasPluginActive {
+		m.execPluginCommand(pluginId, data)
+		return
+	}
+
+	// Execute the command in the server's current directory context
+	out := m.execShellCommand(str)
+	// Send the response with the server's current path
+	m.TransmitWithPath(out, data.CmdUUID, data.ClientUUID, m.currentDir, 0, "")
+
 }
 
 // execShellCommand executes a shell command in the server's current directory context.
@@ -114,9 +117,10 @@ func NewOutMessage(msg, clientUUID, cmdUUID string) OutMessage {
 // NewOutMessageWithPrompt creates a new OutMessage with a custom prompt.
 func NewOutMessageWithPrompt(msg, clientUUID, cmdUUID, prompt string) OutMessage {
 	return OutMessage{
-		msg:        fmt.Sprintf("[%s] %s", prompt, msg), // Include the prompt in the message
+		msg:        msg, // fmt.Sprintf("[%s] %s", prompt, msg), // Include the prompt in the message
 		clientUUID: clientUUID,
 		cmdUUID:    cmdUUID,
+		prompt:     prompt,
 	}
 }
 
@@ -125,6 +129,7 @@ type OutMessage struct {
 	msg        string // The message content
 	clientUUID string // The UUID of the client
 	cmdUUID    string // The UUID of the command
+	prompt     string // The custom prompt
 }
 
 // NewServerChat creates a new MQTT server chat instance.
@@ -161,7 +166,7 @@ func (m *MqttServerChat) mqttTransmit() {
 		case out := <-m.outputChan:
 			outMsg := out.msg
 			if outMsg != "" {
-				m.Transmit(outMsg, out.cmdUUID, out.clientUUID)
+				m.TransmitWithPath(outMsg, out.cmdUUID, out.clientUUID, m.currentDir, 0, out.prompt)
 			}
 		}
 	}

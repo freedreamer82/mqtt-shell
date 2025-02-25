@@ -24,6 +24,10 @@ type SubScribeMessage struct {
 	Qos   byte
 }
 
+const (
+	FLAG_MASK_AUTOCOMPLETE uint32 = 1 << 0
+)
+
 type MqttJsonData struct {
 	Ip           string `json:"ip"`
 	Version      string `json:"version"`
@@ -181,13 +185,13 @@ func (m *MqttChat) TransmitWithFlags(out string, cmdUuid string, clientUuid stri
 }
 
 // TransmitWithPrompt sends a message to the client with a custom prompt.
-func (m *MqttChat) TransmitWithPrompt(out string, cmdUuid string, clientUuid string, customPrompt string) {
-	m.transmit(out, cmdUuid, clientUuid, customPrompt, 0, "")
+func (m *MqttChat) TransmitWithPrompt(out string, cmdUuid string, clientUuid string, customPrompt string, flags uint32) {
+	m.transmit(out, cmdUuid, clientUuid, customPrompt, flags, "")
 }
 
 // TransmitWithPath sends a message to the client with the current path.
-func (m *MqttChat) TransmitWithPath(out string, cmdUuid string, clientUuid string, currentPath string) {
-	m.transmit(out, cmdUuid, clientUuid, "", 0, currentPath)
+func (m *MqttChat) TransmitWithPath(out string, cmdUuid string, clientUuid string, currentPath string, flags uint32, prompt string) {
+	m.transmit(out, cmdUuid, clientUuid, prompt, flags, currentPath)
 }
 
 func decodeData(dataraw []byte) []byte {

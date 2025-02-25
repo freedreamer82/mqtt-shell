@@ -2,12 +2,13 @@ package telnetbridge
 
 import (
 	"fmt"
-	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
-	"github.com/reiver/go-telnet"
-	log "github.com/sirupsen/logrus"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
+	"github.com/reiver/go-telnet"
+	log "github.com/sirupsen/logrus"
 )
 
 const defaultTelnetBridgePluginName = "telnet"
@@ -57,6 +58,9 @@ func (t *TelnetBridge) isTelnetBridgeCommand(str string) (bool, []string, int) {
 		}
 	}
 	return false, nil, 0
+}
+func (t *TelnetBridge) GetName() string {
+	return "telnet"
 }
 
 func (t *TelnetBridge) OnDataRx(data mqttchat.MqttJsonData) {
