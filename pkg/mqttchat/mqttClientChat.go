@@ -94,10 +94,7 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 	m.customPrompt = data.CustomPrompt
 	m.currentServerPath = data.CurrentPath
 
-	//if strings.HasPrefix(out, "autocomplete:") {
 	if data.Flags&FLAG_MASK_AUTOCOMPLETE > 0 {
-		// Handle autocompletion response
-		//options := strings.TrimPrefix(out, "autocomplete:")
 		options := out
 		optionList := strings.Split(options, "\n")
 
@@ -362,7 +359,7 @@ func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txT
 		Prompt:          prompt,
 		HistoryFile:     cc.historyFile,
 		HistoryLimit:    cc.historyLimit,
-		AutoComplete:    cc.setupDynamicAutocompletion(),
+		AutoComplete:    nil,
 		InterruptPrompt: "^C",
 		EOFPrompt:       "exit",
 		Stdin:           wrappedReader,
@@ -384,50 +381,9 @@ func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txT
 	return &cc
 }
 
-/* func (m *MqttClientChat) setupDynamicAutocompletion() readline.AutoCompleter {
-	m.autocompleteChan = make(chan []string, 100)
-
-	completer := readline.NewPrefixCompleter(
-		readline.PcItemDynamic(func(line string) []string {
-			// Estrai la parte del percorso dopo il comando (ad esempio, dopo "ls ")
-			parts := strings.SplitN(line, " ", 2)
-			if len(parts) < 2 {
-				// Se non c'è uno spazio, considera il percorso come vuoto (directory corrente)
-				parts = append(parts, ".")
-			}
-			pathPart := strings.TrimSpace(parts[1])
-
-			// Invia solo la parte del percorso al server
-			m.Transmit(fmt.Sprintf("autocomplete %s", pathPart), "", m.uuid)
-
-			// Attendi le opzioni dal server
-			select {
-			case options := <-m.autocompleteChan:
-				return options
-			case <-time.After(2 * time.Second): // Timeout dopo 2 secondi
-				return []string{}
-			}
-		}),
-	)
-
-	return completer
-}
-*/
-
 type dynamicCompleter struct {
 	getOptions func(line string) []string
 }
-
-/*
-	 func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
-		options := d.getOptions(string(line))
-		var result [][]rune
-		for _, opt := range options {
-			result = append(result, []rune(opt))
-		}
-		return result, 0 //len(line)
-	}
-*/
 
 func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
 	if pos < 0 || pos > len(line) { // Ensure pos is valid
@@ -453,7 +409,6 @@ func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length in
 	return result, length
 }
 
-// Funzione per calcolare la lunghezza del prefisso comune tra due slice di rune
 func commonPrefixLength(a, b []rune) int {
 	minLength := len(a)
 	if len(b) < minLength {
@@ -467,55 +422,26 @@ func commonPrefixLength(a, b []rune) int {
 	return minLength
 }
 
-/*
-func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
-	// Converte il runes in string
-	input := string(line)
-	// Ottiene le opzioni di completamento
-	options := d.getOptions(input)
-	var result [][]rune
-
-	// Elimina il comando dalla riga di input
-	parts := strings.Fields(input)
-	if len(parts) > 1 {
-		// Solo se ci sono più parti, consideriamo il percorso
-		pathPart := strings.TrimSpace(parts[1])
-		// Confronta le opzioni con il percorso parziale
-		for _, opt := range options {
-			if strings.HasPrefix(opt, pathPart) { // Controlla se l'opzione inizia con il percorso
-				result = append(result, []rune(opt)) // Aggiungi solo l'opzione se corrisponde
-			}
-		}
-	}
-
-	return result, len(line)
-}
-*/
-
 func (m *MqttClientChat) setupDynamicAutocompletion() readline.AutoCompleter {
 	m.autocompleteChan = make(chan []string, 100)
 
 	completer := &dynamicCompleter{
 		getOptions: func(line string) []string {
-			// Estrai la parte del percorso dopo il comando (ad esempio, dopo "ls ")
+			// get last word to autocomplete
 			parts := strings.SplitN(line, " ", 2)
-			//last word
 			pathPart := strings.TrimSpace(parts[len(parts)-1])
 
-			// Svuota il canale prima di inviare una nuova richiesta
+			// clear channel before
 			for len(m.autocompleteChan) > 0 {
 				<-m.autocompleteChan
 			}
 
-			// Invia solo la parte del percorso al server
 			m.TransmitWithFlags(pathPart, "", m.uuid, FLAG_MASK_AUTOCOMPLETE)
-			//m.Transmit(fmt.Sprintf("autocomplete %s", pathPart), "", m.uuid)
 
-			// Attendi le opzioni dal server
 			select {
 			case options := <-m.autocompleteChan:
 				return options
-			case <-time.After(5 * time.Second): // Timeout dopo 2 secondi
+			case <-time.After(5 * time.Second):
 				return []string{}
 			}
 		},

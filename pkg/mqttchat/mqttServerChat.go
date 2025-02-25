@@ -52,13 +52,9 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 	}
 
 	// Check if the command is an autocomplete request
-	//	if strings.HasPrefix(str, "autocomplete ") {
 	if data.Flags&FLAG_MASK_AUTOCOMPLETE > 0 {
-		// Handle autocomplete request
-		//partialInput := strings.TrimPrefix(str, "autocomplete ")
 		partialInput := str
 		options := m.generateAutocompleteOptions(partialInput)
-		//m.TransmitWithPath(fmt.Sprintf("autocomplete:%s", options), data.CmdUUID, data.ClientUUID, m.currentDir, 0, "")
 		m.TransmitWithPath(options, data.CmdUUID, data.ClientUUID, m.currentDir, FLAG_MASK_AUTOCOMPLETE, "")
 		return
 	}
@@ -79,8 +75,6 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 
 // execShellCommand executes a shell command in the server's current directory context.
 func (m *MqttServerChat) execShellCommand(cmd string) string {
-	// Log the current directory for debugging
-	//log.Printf("Current directory: %s\n", m.currentDir)
 
 	// Handle the "cd" command to change directory
 	if strings.HasPrefix(cmd, "cd ") {
@@ -213,182 +207,10 @@ func WithOptionNetworkInterface(netI string) MqttServerChatOption {
 	}
 }
 
-/*
-func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string {
-	var pathPart string
-
-	// Check if the input starts with a slash (absolute path)
-	if strings.HasPrefix(partialInput, "/") {
-		// Treat the entire input as an absolute path
-		pathPart = partialInput
-	} else {
-		// Split the input on the first space to separate the command from the path
-		parts := strings.SplitN(partialInput, " ", 2)
-		if len(parts) < 2 {
-			// If there is no space, assume the path is empty (current directory)
-			pathPart = "."
-		} else {
-			// Use the part after the space as the path
-			pathPart = strings.TrimSpace(parts[1])
-		}
-	}
-
-	// If pathPart is empty, default to the current directory
-	if pathPart == "" {
-		pathPart = "."
-	}
-
-	var dir, prefix string
-	var isLocalPath bool
-
-	// Determine if the path is absolute or relative
-	if strings.HasPrefix(pathPart, "/") {
-		// Absolute path: use the path as-is
-		dir = pathPart
-		prefix = ""
-		isLocalPath = false
-	} else {
-		// Relative path: prepend the current directory
-		dir = filepath.Join(m.currentDir, filepath.Dir(pathPart))
-		prefix = filepath.Base(pathPart)
-		prefix = ""
-		isLocalPath = true
-	}
-
-	// Read files in the directory
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return ""
-		//fmt.Sprintf("error: %v", err)
-	}
-
-	var options []string
-	for _, file := range files {
-		// If prefix is empty, include all files (except hidden files if desired)
-		if prefix == "" {
-			// Optionally exclude hidden files (those starting with ".")
-			if !strings.HasPrefix(file.Name(), ".") {
-				pre := ""
-				if partialInput != "" && partialInput[len(partialInput)-1] != '/' {
-					pre = "/"
-				}
-				options = append(options, pre+file.Name())
-			}
-		} else if strings.HasPrefix(file.Name(), prefix) {
-			// If prefix is not empty, include only files that match the prefix
-			if isLocalPath {
-				// Local path: add only the file/directory name
-				options = append(options, file.Name())
-			} else {
-				// Absolute path: add the full path
-				fullPath := filepath.Join(dir, file.Name())
-				options = append(options, fullPath)
-			}
-		}
-	}
-
-	return strings.Join(options, "\n")
-}
-*/
-
 const (
 	MaxOptionsSize       = 90    // Dimensione massima di options
 	MoreOptionsIndicator = "..." // Indicatore per opzioni aggiuntive
 )
-
-/* func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string {
-	var pathPart string
-
-	if partialInput == "" {
-		dir := m.currentDir
-		files, err := os.ReadDir(dir)
-		if err != nil {
-			return ""
-		}
-		var options []string
-		for _, file := range files {
-			if !strings.HasPrefix(file.Name(), ".") {
-				options = append(options, file.Name())
-				if len(options) >= MaxOptionsSize {
-					options = append(options, MoreOptionsIndicator) // Usa la costante
-					break
-				}
-			}
-		}
-		return strings.Join(options, "\n")
-	}
-
-	if strings.HasPrefix(partialInput, "/") {
-		pathPart = partialInput
-	} else {
-		parts := strings.SplitN(partialInput, " ", 2)
-		if len(parts) < 2 {
-			pathPart = "./"
-		} else {
-			pathPart = strings.TrimSpace(parts[1])
-		}
-	}
-
-	if pathPart == "" {
-		pathPart = "./"
-	}
-
-	var dir, prefix string
-
-	if strings.HasSuffix(pathPart, "/") {
-		dir = pathPart
-		prefix = ""
-	} else {
-		if strings.HasPrefix(pathPart, "/") {
-			dir = filepath.Dir(pathPart)
-			prefix = filepath.Base(pathPart)
-		} else {
-			dir = filepath.Join(m.currentDir, filepath.Dir(pathPart))
-			prefix = filepath.Base(pathPart)
-		}
-	}
-
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return ""
-	}
-
-	var options []string
-	var foundDir bool
-
-	for _, file := range files {
-		if !strings.HasPrefix(file.Name(), ".") && strings.HasPrefix(file.Name(), prefix) {
-			fileInfo, err := os.Stat(filepath.Join(dir, file.Name()))
-			if err != nil {
-				continue
-			}
-			if fileInfo.IsDir() {
-				if prefix == file.Name() {
-					fmt.Print("adding /")
-					return "/"
-				}
-				options = append(options, strings.TrimPrefix(file.Name(), prefix)+"/")
-				foundDir = true
-			} else {
-				options = append(options, strings.TrimPrefix(file.Name(), prefix))
-			}
-
-			if len(options) >= MaxOptionsSize {
-				options = append(options, MoreOptionsIndicator) // Usa la costante
-				break
-			}
-		}
-	}
-
-	if len(options) == 1 && foundDir {
-		fmt.Print(strings.Join(options, "\n"))
-		return options[0]
-	}
-
-	print(strings.Join(options, "\n"))
-	return strings.Join(options, "\n")
-}
-*/
 
 func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string {
 	if partialInput == "" {
@@ -397,7 +219,7 @@ func (m *MqttServerChat) generateAutocompleteOptions(partialInput string) string
 
 	dir, prefix := m.parseInputPath(partialInput)
 	out := m.listFilesInDir(dir, prefix)
-	fmt.Print(out)
+	//	fmt.Print(out)
 	return out
 }
 
