@@ -102,8 +102,8 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 		m.autocompleteChan <- optionList
 	} else {
 		// Handle normal output
-		m.print(out + "\n")
 		m.printPrompt()
+		m.print(out + "\n")
 	}
 
 }
