@@ -102,6 +102,15 @@ type Network struct {
 	Interface string
 }
 
+type SSHConsole struct {
+	Privatekey string
+	Host       string
+	Port       int
+	Password   string
+	Maxconns   int
+	TimeoutSec int
+}
+
 type Config struct {
 	CLI
 	// Logging is the logging configuration
@@ -113,6 +122,7 @@ type Config struct {
 	BeaconResponseTopic string
 	TimeoutBeaconSec    uint64
 	TelnetBridgePlugin  TelnetBridgePluginConfig
+	SSHConsole          SSHConsole
 	Network             Network
 }
 
