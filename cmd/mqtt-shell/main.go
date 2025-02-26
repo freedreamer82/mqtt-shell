@@ -2,12 +2,14 @@ package main
 
 import (
 	"fmt"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/bundle"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/constant"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/locale"
 	"github.com/freedreamer82/mqtt-shell/internal/pkg/screens"
+	"github.com/freedreamer82/mqtt-shell/pkg/appconsole"
 	"github.com/freedreamer82/mqtt-shell/pkg/info"
 	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 	"github.com/freedreamer82/mqtt-shell/pkg/plugins/telnetbridge"
@@ -113,6 +115,13 @@ func main() {
 			chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION, netIOpt)
 		}
 		chat.Start()
+
+		if conf.SSHConsole.Privatekey != "" {
+			sshConsole := appconsole.NewMqttServerChatConsole(chat, conf.SSHConsole.Host, conf.SSHConsole.Port,
+				conf.SSHConsole.Maxconns, conf.SSHConsole.Privatekey, conf.SSHConsole.TimeoutSec, conf.SSHConsole.Password)
+			sshConsole.Start()
+		}
+
 	} else if conf.Mode == "client" {
 
 		log.Info("Starting client..")
