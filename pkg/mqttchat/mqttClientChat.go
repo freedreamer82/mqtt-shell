@@ -29,17 +29,19 @@ type ClientChatIO struct {
 // MqttClientChat represents the MQTT chat client.
 type MqttClientChat struct {
 	*MqttChat
-	waitServerChan      chan bool          // Channel to wait for server response
-	rl                  *readline.Instance // Readline instance for input handling
-	uuid                string             // Unique client UUID
-	customPrompt        string             // Custom prompt for the client
-	enableColor         bool               // Enable colored output
-	printPromptManually bool               // Whether to print the prompt manually
-	historyFile         string             // Path to the history file
-	historyLimit        int                // Maximum number of entries in the history file
-	currentServerPath   string             // Current server path
-	autocompleteChan    chan []string      // Channel for autocompletion options
-
+	waitServerChan         chan bool          // Channel to wait for server response
+	rl                     *readline.Instance // Readline instance for input handling
+	uuid                   string             // Unique client UUID
+	customPrompt           string             // Custom prompt for the client
+	enableColor            bool               // Enable colored output
+	printPromptManually    bool               // Whether to print the prompt manually
+	historyFile            string             // Path to the history file
+	historyLimit           int                // Maximum number of entries in the history file
+	currentServerPath      string             // Current server path
+	autocompleteChan       chan []string      // Channel for autocompletion options
+	lastServerActivityTime time.Time
+	pingTicker             *time.Ticker
+	pingDoneChan           chan struct{}
 }
 
 // print prints the given arguments to the readline output.
@@ -57,6 +59,36 @@ func (m *MqttClientChat) printWithoutLn(a ...interface{}) (n int, err error) {
 	return fmt.Fprint(m.rl.Stdout(), a...)
 }
 
+// StartPingInterval starts a goroutine to send PING messages every minute.
+func (m *MqttClientChat) startPingInterval() {
+	m.pingTicker = time.NewTicker(1 * time.Minute)
+	m.pingDoneChan = make(chan struct{})
+
+	m.sendPing()
+
+	go func() {
+		for {
+			select {
+			case <-m.pingTicker.C:
+				if m.IsServerConnected() {
+					m.sendPing()
+				}
+			case <-m.pingDoneChan:
+				m.pingTicker.Stop()
+				return
+			}
+		}
+	}()
+}
+
+// StopPingInterval stops the PING interval goroutine.
+func (m *MqttClientChat) stopPingInterval() {
+	if m.pingDoneChan != nil {
+		close(m.pingDoneChan)
+		m.pingDoneChan = nil
+	}
+}
+
 // IsDataInvalid checks if the received MQTT data is invalid.
 func (m *MqttClientChat) IsDataInvalid(data MqttJsonData) bool {
 	// Check if the message is for this client
@@ -72,6 +104,14 @@ func (m *MqttClientChat) IsDataInvalid(data MqttJsonData) bool {
 	return false
 }
 
+func (m *MqttClientChat) sendPing() {
+	pingData := NewMqttJsonDataEmpty()
+	pingData.Cmd = MSG_DATA_TYPE_CMD_PING
+	pingData.ClientUUID = m.uuid
+
+	m.Transmit(pingData)
+}
+
 // IsServerConnected checks if the MQTT client is connected to the server.
 func (m *MqttClientChat) IsServerConnected() bool {
 	return m.worker.GetMqttClient().IsConnected()
@@ -81,11 +121,18 @@ func (m *MqttClientChat) IsServerConnected() bool {
 func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 	if !m.IsServerConnected() {
 		m.print("Server disconnected. Please reconnect.\n")
+		m.stopPingInterval()
 		return
 	}
 
 	if m.IsDataInvalid(data) {
 		log.Debugf("Invalid message received: ClientUUID=%s, CmdUUID=%s", data.ClientUUID, data.CmdUUID)
+		return
+	}
+
+	if data.Cmd == MSG_DATA_TYPE_CMD_PONG {
+		m.lastServerActivityTime = time.Now()
+		//m.sendPing()
 		return
 	}
 
@@ -105,7 +152,6 @@ func (m *MqttClientChat) OnDataRx(data MqttJsonData) {
 		m.printPrompt()
 		m.print(out + "\n")
 	}
-
 }
 
 // waitServerCb is the callback for waiting for the server response.
@@ -152,6 +198,7 @@ func (m *MqttClientChat) printPrompt() {
 func (m *MqttClientChat) printLogin(ip string, serverVersion string) {
 	log.Info("Connected")
 	m.printf(login, ip, serverVersion, m.version, m.uuid, m.txTopic, m.rxTopic)
+	m.startPingInterval()
 }
 
 // waitServer waits for the server to respond and handles retries.

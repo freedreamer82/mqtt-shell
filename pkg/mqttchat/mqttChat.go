@@ -23,6 +23,8 @@ const (
 	MSG_DATA_TYPE_CMD_WHO_AM_I     string = "whoami"
 	MSG_DATA_TYPE_CMD_SHELL        string = "shell"
 	MSG_DATA_TYPE_CMD_AUTOCOMPLETE string = "autocomplete"
+	MSG_DATA_TYPE_CMD_PING         string = "ping"
+	MSG_DATA_TYPE_CMD_PONG         string = "pong"
 )
 
 type SubScribeMessage struct {

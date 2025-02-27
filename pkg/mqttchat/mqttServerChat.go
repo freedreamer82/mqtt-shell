@@ -16,7 +16,7 @@ import (
 const (
 	pluginCmdPrefix   = "plugin"        // Prefix for plugin commands
 	outputMsgSize     = 10000           // Size of the output message channel
-	inactivityTimeout = 5 * time.Minute // Timeout for client inactivity
+	inactivityTimeout = 3 * time.Minute // Timeout for client inactivity
 )
 
 const MaxOptionsSize = 90
@@ -48,7 +48,16 @@ func (m *MqttServerChat) SetInactivityTimeout(timeout time.Duration) {
 	m.inactivityTimeout = timeout
 }
 
-// MqttServerChatOption defines a function type for configuring the MQTT server chat.
+func (m *MqttServerChat) sendPong(cmduuid string, clientuuid string) {
+	pingData := NewMqttJsonDataEmpty()
+
+	pingData.Cmd = MSG_DATA_TYPE_CMD_PONG
+	pingData.CmdUUID = cmduuid
+	pingData.ClientUUID = clientuuid
+
+	m.Transmit(pingData)
+}
+
 type MqttServerChatOption func(*MqttServerChat)
 
 // OnDataRx handles incoming data from clients.
@@ -57,18 +66,66 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 		return
 	}
 
-	// Get or create the client state
-	clientState, _ := m.clientStates.LoadOrStore(data.ClientUUID, &ClientState{
-		ClientUUID: data.ClientUUID, // Include the client UUID
-		CurrentDir: m.currentDir,    // Default to server's current directory
-		LastActive: time.Now(),
-	})
+	// Check if the client UUID is already being managed
+	clientState, exists := m.clientStates.Load(data.ClientUUID)
+	if !exists {
+		// If the UUID is not managed, log it and optionally handle it
+		log.Printf("UUID %s is not managed. Creating new client state.", data.ClientUUID)
+		clientState = m.createClientState(data.ClientUUID)
+		m.clientStates.Store(data.ClientUUID, clientState)
+	}
 
 	state := clientState.(*ClientState)
 
 	// Update the last activity time for the client
 	state.LastActive = time.Now()
 
+	// Handle the incoming message based on its type
+	switch data.Cmd {
+	case MSG_DATA_TYPE_CMD_PING:
+		m.handlePing(data, state)
+	case MSG_DATA_TYPE_CMD_AUTOCOMPLETE:
+		m.handleAutocomplete(data, state)
+	default:
+		m.handleCommand(data, state)
+	}
+}
+
+// isUUIDManaged checks if the UUID is already managed by the server
+func (m *MqttServerChat) isUUIDManaged(uuid string) bool {
+	_, exists := m.clientStates.Load(uuid)
+	return exists
+}
+
+// createClientState creates a new client state with default values
+func (m *MqttServerChat) createClientState(clientUUID string) *ClientState {
+	return &ClientState{
+		ClientUUID: clientUUID,
+		CurrentDir: m.currentDir,
+		LastActive: time.Now(),
+	}
+}
+
+func (m *MqttServerChat) handlePing(data MqttJsonData, state *ClientState) {
+	// Send a PONG response with the CmdUUID and ClientUUID
+	m.sendPong(data.CmdUUID, data.ClientUUID)
+
+}
+
+func (m *MqttServerChat) handleAutocomplete(data MqttJsonData, state *ClientState) {
+	partialInput := fmt.Sprintf("%s", data.Data)
+	options := m.generateAutocompleteOptions(partialInput, state.CurrentDir)
+	responseData := NewMqttJsonDataEmpty()
+	responseData.Data = options
+	responseData.CmdUUID = data.CmdUUID
+	responseData.ClientUUID = state.ClientUUID
+	responseData.CurrentPath = state.CurrentDir
+	responseData.Cmd = MSG_DATA_TYPE_CMD_AUTOCOMPLETE
+	m.Transmit(responseData)
+}
+
+// handleCommand handles generic commands
+func (m *MqttServerChat) handleCommand(data MqttJsonData, state *ClientState) {
 	str := fmt.Sprintf("%s", data.Data)
 
 	// Check if the command is a plugin configuration command
@@ -76,21 +133,6 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 	if isPlugin && data.ClientUUID != "" {
 		res, p := m.handlePluginConfigCmd(data.ClientUUID, args, argsNo)
 		m.outputChan <- NewOutMessageWithPrompt(res, data.ClientUUID, data.CmdUUID, p)
-		return
-	}
-
-	// Check if the command is an autocomplete request
-	if data.Cmd == MSG_DATA_TYPE_CMD_AUTOCOMPLETE {
-		partialInput := str
-		options := m.generateAutocompleteOptions(partialInput, state.CurrentDir)
-		data := NewMqttJsonDataEmpty()
-		data.Data = options
-		data.CmdUUID = data.CmdUUID
-		data.ClientUUID = state.ClientUUID
-		data.CurrentPath = state.CurrentDir
-		data.Cmd = MSG_DATA_TYPE_CMD_AUTOCOMPLETE
-		m.Transmit(data)
-
 		return
 	}
 
@@ -102,13 +144,12 @@ func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
 
 	// Execute the command in the client's current directory context
 	out := m.execShellCommand(str, state)
-	data2send := NewMqttJsonDataEmpty()
-	data2send.Data = out
-	data2send.CmdUUID = data.CmdUUID
-	data2send.ClientUUID = state.ClientUUID
-	data2send.CurrentPath = state.CurrentDir
-	m.Transmit(data2send)
-	//m.TransmitWithPath(out, data.CmdUUID, state.ClientUUID, state.CurrentDir, 0, "")
+	responseData := NewMqttJsonDataEmpty()
+	responseData.Data = out
+	responseData.CmdUUID = data.CmdUUID
+	responseData.ClientUUID = state.ClientUUID
+	responseData.CurrentPath = state.CurrentDir
+	m.Transmit(responseData)
 }
 
 // execShellCommand executes a shell command in the client's current directory context.

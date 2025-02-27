@@ -34,7 +34,9 @@ func NewMqttServerChatConsole(mqttChat *chat.MqttServerChat, host string, port i
 	handler.user["root"] = password
 
 	info := appconsole.NewInfoCommand()
+	cl := appconsole.NewClientsCommandCommand(mqttChat)
 	handler.cmds = append(handler.cmds, info)
+	handler.cmds = append(handler.cmds, cl)
 
 	var err error
 	// Configure the console

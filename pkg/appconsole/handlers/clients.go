@@ -1,56 +1,60 @@
 package appconsole
 
-// import (
-// 	"os"
-// 	"time"
+import (
+	"bytes"
+	"github.com/freedreamer82/go-console/pkg/console"
+	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
+	"github.com/olekukonko/tablewriter"
+	"time"
+)
 
-// 	"github.com/freedreamer82/go-console/pkg/console"
-// 	"github.com/olekukonko/tablewriter"
-// )
+const CommandClients = "clients"
+const CommandClientsHelp = "clients   - List all connected clients in a table"
 
-// const CommandInfo = "clients"
-// const CommandInfoHelp = "clients   - List all connected clients in a table"
+type ClientsCommand struct {
+	console.ConsoleCommand
+	mqttServer *mqttchat.MqttServerChat
+}
 
-// type ClientsCommand struct {
-// 	console.ConsoleCommand
-// }
+func (c *ClientsCommand) handler() string {
+	clients := c.mqttServer.GetClientsConnected()
 
-// func (c *ClientsCommand) handler() string {
-// 	clients := c.mqttChat.GetClientsConnected()
+	// Usa un buffer invece di os.Stdout
+	var buffer bytes.Buffer
+	table := tablewriter.NewWriter(&buffer)
+	table.SetHeader([]string{"UUID", "Directory", "Status", "Last Activity"})
 
-// 	// Create a new table
-// 	table := tablewriter.NewWriter(os.Stdout)
-// 	table.SetHeader([]string{"UUID", "Directory", "Status", "Last Activity"})
+	// Aggiungi le righe alla tabella
+	for clientUUID, state := range clients {
+		status := "Connected"
+		if time.Since(state.LastActive) > c.mqttServer.GetInactivityTimeout() {
+			status = "Timeout"
+		}
+		table.Append([]string{
+			clientUUID,
+			state.CurrentDir,
+			status,
+			state.LastActive.Format(time.RFC3339),
+		})
+	}
 
-// 	// Add rows to the table
-// 	for clientUUID, state := range clients {
-// 		status := "Connected"
-// 		if time.Since(state.LastActive) > c.mqttChat.GetInactivityTimeout() {
-// 			status = "Timeout"
-// 		}
-// 		table.Append([]string{
-// 			clientUUID,
-// 			state.CurrentDir,
-// 			status,
-// 			state.LastActive.Format(time.RFC3339),
-// 		})
-// 	}
+	// Genera la tabella come stringa
+	table.Render()
 
-// 	// Render the table
-// 	table.Render()
-// }
+	return buffer.String() // Restituisce la stringa invece di stamparla
+}
+func NewClientsCommandCommand(mqttServerChat *mqttchat.MqttServerChat) *console.ConsoleCommand {
 
-// func NewClientsCommandCommand() *console.ConsoleCommand {
+	cl := ClientsCommand{mqttServer: mqttServerChat}
 
-// 	info := ClientsCommand{}
-// 	var c = console.NewConsoleCommand(
-// 		CommandInfo,
-// 		func(c *console.Console, command *console.ConsoleCommand, args []string) console.CommandError {
-// 			c.Print(info.handler())
-// 			return console.N0_ERR
-// 		},
-// 		CommandInfoHelp,
-// 	)
-// 	info.ConsoleCommand = *c
-// 	return &info.ConsoleCommand
-// }
+	var c = console.NewConsoleCommand(
+		CommandClients,
+		func(c *console.Console, command *console.ConsoleCommand, args []string) console.CommandError {
+			c.Print(cl.handler())
+			return console.N0_ERR
+		},
+		CommandClientsHelp,
+	)
+	cl.ConsoleCommand = *c
+	return &cl.ConsoleCommand
+}
