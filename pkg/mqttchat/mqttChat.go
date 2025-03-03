@@ -101,6 +101,10 @@ func (m *MqttChat) Transmit(data *MqttJsonData) {
 	m.transmit(data.Data, data.CmdUUID, data.ClientUUID, data.CustomPrompt, data.Flags, data.CurrentPath, data.Cmd)
 }
 
+func (m *MqttChat) Worker() *mqtt.Worker {
+	return m.worker
+}
+
 // Funzione transmit privata
 func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, customPrompt string, flags uint32, path string, dataCmd string) {
 	if cmdUuid == "" {
@@ -260,7 +264,7 @@ func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, versi
 		opt(&m)
 	}
 
-	m.worker.SetConnectionCB(
+	m.worker.AddConnectionCB(
 		func(status mqtt.ConnectionStatus) {
 			switch status {
 			case mqtt.ConnectionStatus_Connected:

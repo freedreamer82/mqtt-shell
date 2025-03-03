@@ -36,7 +36,29 @@ type CLI struct {
 	BrokerPort     int              `short:"p" help:"broker port"`
 	Version        kong.VersionFlag `short:"v" xor:"flags"`
 	Id             string           `short:"i" help:"node id"`
-	Mode           string           `short:"m" enum:"client,server,beacon,gui,null" default:"null" help:"client, server, beacon, or gui"`
+
+	Client struct {
+	} `cmd:"client"`
+
+	Server struct {
+	} `cmd:"server"`
+
+	Beacon struct {
+	} `cmd:"beacon"`
+
+	Copy struct {
+		Local2Remote struct {
+			Source      string `short:"S" help:"local source" required:"true"`
+			Destination string `short:"D" help:"remote destination" required:"true"`
+		} `cmd`
+		Remote2Local struct {
+			Source      string `short:"S" help:"remote source" required:"true"`
+			Destination string `short:"D" help:"local destination" required:"true"`
+		} `cmd`
+	} `cmd:"copy"`
+
+	Gui struct {
+	} `cmd:"gui"`
 }
 
 var (
@@ -124,6 +146,32 @@ type Config struct {
 	TelnetBridgePlugin  TelnetBridgePluginConfig
 	SSHConsole          SSHConsole
 	Network             Network
+	Cp                  CpConfig
+}
+
+type CpConfig struct {
+	CpServerEnabled   bool
+	Local2ServerTopic string
+	Server2LocalTopic string
+}
+
+func NewDefaultCpConfig(id string) CpConfig {
+	return CpConfig{
+		CpServerEnabled:   false,
+		Local2ServerTopic: getLocal2ServerTopic(id),
+		Server2LocalTopic: getServer2LocalTopic(id),
+	}
+}
+
+const templateTopicLocal2Server = "/mqtt-cp/%s/cmd"
+const templateTopicServer2Local = "/mqtt-cp/%s/cmd/res"
+
+func getLocal2ServerTopic(id string) string {
+	return fmt.Sprintf(templateTopicLocal2Server, id)
+}
+
+func getServer2LocalTopic(id string) string {
+	return fmt.Sprintf(templateTopicServer2Local, id)
 }
 
 type TelnetBridgePluginConfig struct {
@@ -137,7 +185,7 @@ type TelnetBridgePluginConfig struct {
 func NewConfig() Config {
 	_, addr := getNetInfo()
 	return Config{
-		CLI:                 CLI{BrokerPort: 1883, Mode: "client"},
+		CLI:                 CLI{BrokerPort: 1883},
 		Logging:             NewLoggingConfig(),
 		TxTopic:             getTxTopic(addr),
 		RxTopic:             getRxTopic(addr),
@@ -147,6 +195,7 @@ func NewConfig() Config {
 		BeaconResponseTopic: BeaconReplyTopic, //getBeaconTopic("+"),
 		TimeoutBeaconSec:    10,
 		TelnetBridgePlugin:  TelnetBridgePluginConfig{Enabled: false, Keyword: "telnet", MaxConnections: 5},
+		Cp:                  NewDefaultCpConfig(addr),
 	}
 }
 
@@ -186,9 +235,9 @@ func fileExists(filename string) bool {
 }
 
 func mergeCliandConfig(config *Config, cli *CLI) {
-	if cli.Mode == "null" {
-		cli.Mode = ""
-	}
+	//if cli.Mode == "null" {
+	//	cli.Mode = ""
+	//}
 	mergo.Merge(&config.CLI, cli, mergo.WithOverride)
 }
 
@@ -247,6 +296,8 @@ func Parse(v *viper.Viper, configFile string, cli *CLI) (*Config, error) {
 		config.BeaconTopic = getBeaconTopic(config.Id)
 		config.BeaconRequestTopic = BeaconRequestTopic
 		config.BeaconResponseTopic = getBeaconTopic("+")
+		config.Cp.Local2ServerTopic = getLocal2ServerTopic(config.Id)
+		config.Cp.Server2LocalTopic = getServer2LocalTopic(config.Id)
 	}
 
 	return &config, nil
