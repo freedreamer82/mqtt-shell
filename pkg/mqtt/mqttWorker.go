@@ -22,15 +22,23 @@ type Worker struct {
 	client                        MQTT.Client
 	mqttOpts                      *MQTT.ClientOptions
 	brokerStartConnectTimerEnable bool
-	connCb                        ConnectionCallback
+	connCb                        []ConnectionCallback
+	started                       bool
 }
 
-func NewWorker(mqttOpts *MQTT.ClientOptions, timerEnable bool, connectionCb ConnectionCallback) *Worker {
+func NewWorker(mqttOpts *MQTT.ClientOptions, timerEnable bool, connectionCb []ConnectionCallback) *Worker {
 	return &Worker{mqttOpts: mqttOpts, brokerStartConnectTimerEnable: timerEnable, connCb: connectionCb}
 }
 
-func (m *Worker) SetConnectionCB(cb ConnectionCallback) {
-	m.connCb = cb
+func (m *Worker) IsConnected() bool {
+	if m.client != nil {
+		return m.client.IsConnected()
+	}
+	return false
+}
+
+func (m *Worker) AddConnectionCB(cb ConnectionCallback) {
+	m.connCb = append(m.connCb, cb)
 }
 
 func (m *Worker) GetOpts() *MQTT.ClientOptions {
@@ -64,6 +72,10 @@ func (m *Worker) GetMqttClient() MQTT.Client {
 }
 
 func (m *Worker) StartMQTT() {
+	if m.started {
+		return
+	}
+	m.started = true
 	if m.mqttOpts.ClientID == "" {
 		m.mqttOpts.SetClientID(getRandomClientId())
 	}
@@ -131,17 +143,23 @@ func getRandomClientId() string {
 
 func (m *Worker) onBrokerConnect(client MQTT.Client) {
 
-	if m.connCb != nil {
-		m.connCb(ConnectionStatus_Connected)
+	for _, cb := range m.connCb {
+		if cb != nil {
+			cb(ConnectionStatus_Connected)
+		}
 	}
 
 	log.Debug("BROKER connected!")
 }
 
 func (m *Worker) onBrokerDisconnect(client MQTT.Client, err error) {
-	if m.connCb != nil {
-		m.connCb(ConnectionStatus_Disconnected)
+
+	for _, cb := range m.connCb {
+		if cb != nil {
+			cb(ConnectionStatus_Disconnected)
+		}
 	}
+
 	log.Debug("BROKER disconnected !", err)
 }
 
