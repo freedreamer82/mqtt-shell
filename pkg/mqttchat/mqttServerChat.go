@@ -33,7 +33,6 @@ type ClientState struct {
 type MqttServerChat struct {
 	*MqttChat
 	plugins           []MqttSeverChatPlugin // List of plugins
-	pluginMap         sync.Map              // Map to store plugin states
 	outputChan        chan OutMessage       // Channel for outgoing messages
 	clientStates      sync.Map              // Map to store client states
 	currentDir        string                // Default directory for the server
@@ -131,7 +130,7 @@ func (m *MqttServerChat) handleCommand(data MqttJsonData, state *ClientState) {
 	// Check if the command is a plugin configuration command
 	isPlugin, args, argsNo := m.isPluginConfigCmd(str)
 	if isPlugin && data.ClientUUID != "" {
-		res, p := m.handlePluginConfigCmd(data.ClientUUID, args, argsNo)
+		res, p := m.handlePluginConfigCmd(state, args, argsNo)
 		m.outputChan <- NewOutMessageWithPrompt(res, data.ClientUUID, data.CmdUUID, p)
 		return
 	}
