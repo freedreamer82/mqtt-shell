@@ -30,9 +30,6 @@ fi
 # Clean previous builds
 rm -rf mqtt-shell*
 
-# Set build flags for all architectures
-BUILD_FLAGS="-ldflags '-w -s'"
-
 # Function to build for a specific architecture
 build_arch() {
     case $1 in
