@@ -15,11 +15,10 @@ import (
 
 const (
 	pluginCmdPrefix   = "plugin"        // Prefix for plugin commands
-	outputMsgSize     = 10000           // Size of the output message channel
+	outputMsgSize     = 1000            // Size of the output message channel (ridotto)
 	inactivityTimeout = 3 * time.Minute // Timeout for client inactivity
+	MaxOptionsSize    = 90              // Max number of autocomplete options
 )
-
-const MaxOptionsSize = 90
 
 // ClientState represents the state of a connected client.
 type ClientState struct {
@@ -29,90 +28,146 @@ type ClientState struct {
 	LastActive time.Time // Last activity time of the client
 }
 
+// OutMessage represents an outgoing message to a client.
+type OutMessage struct {
+	msg        string // The message content
+	clientUUID string // The UUID of the client
+	cmdUUID    string // The UUID of the command
+	prompt     string // The custom prompt
+}
+
+// ServerTopic defines the MQTT topics for the server.
+type ServerTopic struct {
+	RxTopic       string // Topic for receiving messages
+	TxTopic       string // Topic for sending messages
+	BeaconRxTopic string // Topic for beacon requests
+	BeaconTxTopic string // Topic for beacon responses
+}
+
 // MqttServerChat represents the MQTT server chat with plugin support and directory context.
 type MqttServerChat struct {
 	*MqttChat
-	plugins           []MqttSeverChatPlugin // List of plugins
+	plugins           []MqttSeverChatPlugin // List of plugins , each client can have 1 plugin at time (stored in client state)
 	outputChan        chan OutMessage       // Channel for outgoing messages
 	clientStates      sync.Map              // Map to store client states
 	currentDir        string                // Default directory for the server
 	inactivityTimeout time.Duration         // Timeout for client inactivity
-}
-
-func (m *MqttServerChat) GetInactivityTimeout() time.Duration {
-	return m.inactivityTimeout
-}
-
-func (m *MqttServerChat) SetInactivityTimeout(timeout time.Duration) {
-	m.inactivityTimeout = timeout
-}
-
-func (m *MqttServerChat) sendPong(cmduuid string, clientuuid string) {
-	pingData := NewMqttJsonDataEmpty()
-
-	pingData.Cmd = MSG_DATA_TYPE_CMD_PONG
-	pingData.CmdUUID = cmduuid
-	pingData.ClientUUID = clientuuid
-
-	m.Transmit(pingData)
+	netInterface      string                // Network interface to use
+	shutdown          chan struct{}         // Channel to signal shutdown
 }
 
 type MqttServerChatOption func(*MqttServerChat)
 
+// NewServerChat creates a new MQTT server chat instance.
+func NewServerChat(mqttOpts *MQTT.ClientOptions, topics ServerTopic, version string, opts ...MqttServerChatOption) *MqttServerChat {
+	// Ottieni la directory corrente una sola volta all'inizio
+	currentDir, err := os.Getwd()
+	if err != nil {
+		log.Printf("Error getting current directory: %v. Using '.'", err)
+		currentDir = "."
+	}
+
+	sc := MqttServerChat{
+		outputChan:        make(chan OutMessage, outputMsgSize),
+		inactivityTimeout: inactivityTimeout,
+		currentDir:        currentDir,
+		shutdown:          make(chan struct{}),
+	}
+
+	chat := NewChat(mqttOpts, topics.RxTopic, topics.TxTopic, version, WithOptionBeaconTopic(topics.BeaconRxTopic, topics.BeaconTxTopic))
+	chat.SetDataCallback(sc.OnDataRx)
+	sc.MqttChat = chat
+
+	// Apply additional options
+	for _, opt := range opts {
+		opt(&sc)
+	}
+
+	if sc.netInterface != "" {
+		sc.MqttChat.netInterface = sc.netInterface
+	}
+
+	// Start the MQTT transmit loop and inactivity monitor
+	go sc.mqttTransmit()
+	go sc.monitorInactivity()
+
+	return &sc
+}
+
+// Cleanup releases resources and stops goroutines
+func (m *MqttServerChat) Cleanup() {
+	close(m.shutdown)
+}
+
+// GetInactivityTimeout returns the inactivity timeout duration.
+func (m *MqttServerChat) GetInactivityTimeout() time.Duration {
+	return m.inactivityTimeout
+}
+
+// SetInactivityTimeout sets the inactivity timeout duration.
+func (m *MqttServerChat) SetInactivityTimeout(timeout time.Duration) {
+	m.inactivityTimeout = timeout
+}
+
+// sendPong sends a PONG response to a client.
+func (m *MqttServerChat) sendPong(cmduuid, clientuuid string) {
+	pingData := NewMqttJsonDataEmpty()
+	pingData.Cmd = MSG_DATA_TYPE_CMD_PONG
+	pingData.CmdUUID = cmduuid
+	pingData.ClientUUID = clientuuid
+	m.Transmit(pingData)
+}
+
 // OnDataRx handles incoming data from clients.
 func (m *MqttServerChat) OnDataRx(data MqttJsonData) {
-	if data.CmdUUID == "" || data.Cmd == "" {
+	if data.CmdUUID == "" || data.Cmd == "" || data.ClientUUID == "" {
+		log.Printf("Invalid message received: missing essential fields")
 		return
 	}
 
-	// Check if the client UUID is already being managed
-	clientState, exists := m.clientStates.Load(data.ClientUUID)
-	if !exists {
-		// If the UUID is not managed, log it and optionally handle it
-		log.Printf("UUID %s is not managed. Creating new client state.", data.ClientUUID)
-		clientState = m.createClientState(data.ClientUUID)
-		m.clientStates.Store(data.ClientUUID, clientState)
-	}
-
-	state := clientState.(*ClientState)
+	// Check if the client UUID is already being managed or create a new state
+	clientState := m.getOrCreateClientState(data.ClientUUID)
 
 	// Update the last activity time for the client
-	state.LastActive = time.Now()
+	clientState.LastActive = time.Now()
 
 	// Handle the incoming message based on its type
 	switch data.Cmd {
 	case MSG_DATA_TYPE_CMD_PING:
-		m.handlePing(data, state)
+		m.handlePing(data, clientState)
 	case MSG_DATA_TYPE_CMD_AUTOCOMPLETE:
-		m.handleAutocomplete(data, state)
+		m.handleAutocomplete(data, clientState)
 	default:
-		m.handleCommand(data, state)
+		m.handleCommand(data, clientState)
 	}
 }
 
-// isUUIDManaged checks if the UUID is already managed by the server
-func (m *MqttServerChat) isUUIDManaged(uuid string) bool {
-	_, exists := m.clientStates.Load(uuid)
-	return exists
-}
-
-// createClientState creates a new client state with default values
-func (m *MqttServerChat) createClientState(clientUUID string) *ClientState {
-	return &ClientState{
-		ClientUUID: clientUUID,
-		CurrentDir: m.currentDir,
-		LastActive: time.Now(),
+// getOrCreateClientState gets an existing client state or creates a new one
+func (m *MqttServerChat) getOrCreateClientState(clientUUID string) *ClientState {
+	state, exists := m.clientStates.Load(clientUUID)
+	if !exists {
+		// If the UUID is not managed, create a new client state
+		log.Printf("UUID %s is not managed. Creating new client state.", clientUUID)
+		newState := &ClientState{
+			ClientUUID: clientUUID,
+			CurrentDir: m.currentDir,
+			LastActive: time.Now(),
+		}
+		m.clientStates.Store(clientUUID, newState)
+		return newState
 	}
+	return state.(*ClientState)
 }
 
+// handlePing handles PING messages from clients.
 func (m *MqttServerChat) handlePing(data MqttJsonData, state *ClientState) {
-	// Send a PONG response with the CmdUUID and ClientUUID
 	m.sendPong(data.CmdUUID, data.ClientUUID)
-
 }
 
+// handleAutocomplete handles autocomplete requests from clients.
 func (m *MqttServerChat) handleAutocomplete(data MqttJsonData, state *ClientState) {
-	partialInput := fmt.Sprintf("%s", data.Data)
+	partialInput := fmt.Sprintf("%v", data.Data)
+
 	options := m.generateAutocompleteOptions(partialInput, state.CurrentDir)
 	responseData := NewMqttJsonDataEmpty()
 	responseData.Data = options
@@ -123,15 +178,20 @@ func (m *MqttServerChat) handleAutocomplete(data MqttJsonData, state *ClientStat
 	m.Transmit(responseData)
 }
 
-// handleCommand handles generic commands
+// handleCommand handles generic commands from clients.
 func (m *MqttServerChat) handleCommand(data MqttJsonData, state *ClientState) {
-	str := fmt.Sprintf("%s", data.Data)
+	cmdStr := fmt.Sprintf("%v", data.Data)
 
 	// Check if the command is a plugin configuration command
-	isPlugin, args, argsNo := m.isPluginConfigCmd(str)
+	isPlugin, args, argsNo := m.isPluginConfigCmd(cmdStr)
 	if isPlugin && data.ClientUUID != "" {
 		res, p := m.handlePluginConfigCmd(state, args, argsNo)
-		m.outputChan <- NewOutMessageWithPrompt(res, data.ClientUUID, data.CmdUUID, p)
+		select {
+		case m.outputChan <- NewOutMessageWithPrompt(res, data.ClientUUID, data.CmdUUID, p):
+			// Message sent successfully
+		default:
+			log.Printf("Output channel full, dropping message for client %s", data.ClientUUID)
+		}
 		return
 	}
 
@@ -142,7 +202,7 @@ func (m *MqttServerChat) handleCommand(data MqttJsonData, state *ClientState) {
 	}
 
 	// Execute the command in the client's current directory context
-	out := m.execShellCommand(str, state)
+	out := m.execShellCommand(cmdStr, state)
 	responseData := NewMqttJsonDataEmpty()
 	responseData.Data = out
 	responseData.CmdUUID = data.CmdUUID
@@ -156,12 +216,28 @@ func (m *MqttServerChat) execShellCommand(cmd string, state *ClientState) string
 	// Handle the "cd" command to change directory
 	if strings.HasPrefix(cmd, "cd ") {
 		dir := strings.TrimSpace(cmd[3:])
+
+		// Se è una directory relativa, uniscila alla directory corrente
+		if !filepath.IsAbs(dir) {
+			dir = filepath.Join(state.CurrentDir, dir)
+		}
+
+		// Espandi la directory (risolvi ".." e ".")
+		dir = filepath.Clean(dir)
+
 		err := os.Chdir(dir)
 		if err != nil {
 			return fmt.Sprintf("error: %v\n", err)
 		}
+
 		// Update the client's current directory
-		state.CurrentDir, _ = os.Getwd()
+		currentDir, err := os.Getwd()
+		if err != nil {
+			log.Printf("Error getting current directory: %v", err)
+			return fmt.Sprintf("Changed directory but failed to get path: %v\n", err)
+		}
+
+		state.CurrentDir = currentDir
 		log.Printf("Client %s changed directory to: %s\n", state.ClientUUID, state.CurrentDir)
 		return fmt.Sprintf("Changed directory to %s\n", state.CurrentDir)
 	}
@@ -195,89 +271,56 @@ func NewOutMessageWithPrompt(msg, clientUUID, cmdUUID, prompt string) OutMessage
 	}
 }
 
-// OutMessage represents an outgoing message to a client.
-type OutMessage struct {
-	msg        string // The message content
-	clientUUID string // The UUID of the client
-	cmdUUID    string // The UUID of the command
-	prompt     string // The custom prompt
-}
-
-// NewServerChat creates a new MQTT server chat instance.
-func NewServerChat(mqttOpts *MQTT.ClientOptions, topics ServerTopic, version string, opts ...MqttServerChatOption) *MqttServerChat {
-	sc := MqttServerChat{}
-	chat := NewChat(mqttOpts, topics.RxTopic, topics.TxTopic, version, WithOptionBeaconTopic(topics.BeaconRxTopic, topics.BeaconTxTopic))
-	chat.SetDataCallback(sc.OnDataRx)
-	sc.MqttChat = chat
-	sc.outputChan = make(chan OutMessage, outputMsgSize)
-	sc.inactivityTimeout = inactivityTimeout
-	// Initialize the server's current directory
-	sc.currentDir, _ = os.Getwd()
-
-	// Apply additional options
-	for _, opt := range opts {
-		opt(&sc)
-	}
-
-	if sc.netInterface != "" {
-		sc.MqttChat.netInterface = sc.netInterface
-	}
-
-	// Start the MQTT transmit loop and inactivity monitor
-	go sc.mqttTransmit()
-	go sc.monitorInactivity()
-
-	return &sc
-}
-
 // mqttTransmit handles outgoing messages to clients.
 func (m *MqttServerChat) mqttTransmit() {
 	for {
 		select {
 		case out := <-m.outputChan:
-			outMsg := out.msg
-			if outMsg != "" {
-				// Retrieve the client state
-				if state, ok := m.clientStates.Load(out.clientUUID); ok {
-					clientState := state.(*ClientState)
-					data := NewMqttJsonDataEmpty()
-					data.Data = outMsg
-					data.CmdUUID = out.cmdUUID
-					data.ClientUUID = clientState.ClientUUID
-					data.CurrentPath = clientState.CurrentDir
-					data.CustomPrompt = out.prompt
-					m.Transmit(data)
-
-					//m.TransmitWithPath(outMsg, out.cmdUUID, clientState.ClientUUID, clientState.CurrentDir, 0, out.prompt)
-				}
+			if out.msg == "" || out.clientUUID == "" {
+				continue
 			}
+
+			// Retrieve the client state without creating a new one if it doesn't exist
+			clientState, exists := m.GetClientState(out.clientUUID)
+			if !exists {
+				log.Printf("Client %s not found for message delivery, skipping", out.clientUUID)
+				continue
+			}
+			data := NewMqttJsonDataEmpty()
+			data.Data = out.msg
+			data.CmdUUID = out.cmdUUID
+			data.ClientUUID = clientState.ClientUUID
+			data.CurrentPath = clientState.CurrentDir
+			data.CustomPrompt = out.prompt
+			m.Transmit(data)
+		case <-m.shutdown:
+			return
 		}
 	}
 }
 
 // monitorInactivity checks for inactive clients and removes them.
 func (m *MqttServerChat) monitorInactivity() {
-	for {
-		time.Sleep(1 * time.Minute) // Check every minute
-		now := time.Now()
-		m.clientStates.Range(func(key, value interface{}) bool {
-			state := value.(*ClientState)
-			if now.Sub(state.LastActive) > m.inactivityTimeout {
-				// Remove inactive client
-				m.clientStates.Delete(state.ClientUUID)
-				log.Printf("Client %s removed due to inactivity\n", state.ClientUUID)
-			}
-			return true
-		})
-	}
-}
+	ticker := time.NewTicker(1 * time.Minute) // Check every minute
+	defer ticker.Stop()
 
-// ServerTopic defines the MQTT topics for the server.
-type ServerTopic struct {
-	RxTopic       string // Topic for receiving messages
-	TxTopic       string // Topic for sending messages
-	BeaconRxTopic string // Topic for beacon requests
-	BeaconTxTopic string // Topic for beacon responses
+	for {
+		select {
+		case <-ticker.C:
+			now := time.Now()
+			m.clientStates.Range(func(key, value interface{}) bool {
+				state := value.(*ClientState)
+				if now.Sub(state.LastActive) > m.inactivityTimeout {
+					// Remove inactive client
+					m.clientStates.Delete(state.ClientUUID)
+					log.Printf("Client %s removed due to inactivity\n", state.ClientUUID)
+				}
+				return true
+			})
+		case <-m.shutdown:
+			return
+		}
+	}
 }
 
 // WithOptionBeaconTopic sets the beacon topic for the MQTT chat.
@@ -302,12 +345,16 @@ func (m *MqttServerChat) generateAutocompleteOptions(partialInput string, curren
 	}
 
 	dir, prefix := m.parseInputPath(partialInput, currentDir)
-	out := m.listFilesInDir(dir, prefix)
-	return out
+	return m.listFilesInDir(dir, prefix)
 }
 
 // listFilesInDir lists files in a directory with a given prefix.
-func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
+func (m *MqttServerChat) listFilesInDir(dir string, prefix string) string {
+	// Verifica validità della directory
+	if dir == "" {
+		dir = "./"
+	}
+
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		return fmt.Sprintf("Error reading directory: %s", err)
@@ -317,6 +364,7 @@ func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
 	var foundDir bool
 
 	for _, file := range files {
+		// Salta i file nascosti e verifica il prefisso
 		if !strings.HasPrefix(file.Name(), ".") && strings.HasPrefix(file.Name(), prefix) {
 			filePath := filepath.Join(dir, file.Name())
 			fileInfo, err := os.Stat(filePath)
@@ -334,6 +382,7 @@ func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
 				options = append(options, strings.TrimPrefix(file.Name(), prefix))
 			}
 
+			// Limita il numero di opzioni
 			if len(options) >= MaxOptionsSize {
 				options = append(options, "...")
 				break
@@ -350,35 +399,57 @@ func (m *MqttServerChat) listFilesInDir(dir, prefix string) string {
 
 // parseInputPath parses the input path for autocomplete.
 func (m *MqttServerChat) parseInputPath(partialInput string, currentDir string) (dir, prefix string) {
+	// Assicurati che currentDir sia valido
+	if currentDir == "" {
+		var err error
+		currentDir, err = os.Getwd()
+		if err != nil {
+			currentDir = "./"
+		}
+	}
+
 	if strings.HasPrefix(partialInput, "/") {
 		// Handle absolute paths
-		dir = filepath.Dir(partialInput)
-		prefix = filepath.Base(partialInput)
-
-		// Check if the path exists and is a directory
-		if fileInfo, err := os.Stat(partialInput); err == nil && fileInfo.IsDir() {
+		lastSlash := strings.LastIndex(partialInput, "/")
+		if lastSlash == len(partialInput)-1 {
+			// If the input ends with a slash, we're looking in that directory
 			dir = partialInput
 			prefix = ""
+		} else {
+			dir = filepath.Dir(partialInput)
+			prefix = filepath.Base(partialInput)
 		}
 	} else if strings.Contains(partialInput, "/") {
 		// Handle relative paths
 		lastSlashIndex := strings.LastIndex(partialInput, "/")
-		dir = filepath.Join(currentDir, partialInput[:lastSlashIndex])
-		prefix = partialInput[lastSlashIndex+1:]
+		relativeDir := partialInput[:lastSlashIndex+1]
 
-		// Check if the directory exists
-		if fileInfo, err := os.Stat(dir); err != nil || !fileInfo.IsDir() {
+		// Unisci la directory corrente con la parte relativa
+		dir = filepath.Join(currentDir, relativeDir)
+		prefix = partialInput[lastSlashIndex+1:]
+	} else if strings.Contains(partialInput, " ") {
+		// Handle commands with arguments
+		parts := strings.Fields(partialInput)
+		if len(parts) <= 1 {
 			dir = currentDir
 			prefix = partialInput
-		}
-	} else if strings.Contains(partialInput, " ") {
-		// Handle commands with relative paths
-		parts := strings.SplitN(partialInput, " ", 2)
-		if len(parts) < 2 {
-			dir = "./"
 		} else {
-			dir = filepath.Join(currentDir, filepath.Dir(parts[1]))
-			prefix = filepath.Base(parts[1])
+			// Analizza l'ultimo argomento
+			lastArg := parts[len(parts)-1]
+			if strings.Contains(lastArg, "/") {
+				lastSlashIndex := strings.LastIndex(lastArg, "/")
+				if lastSlashIndex >= 0 {
+					relativePath := lastArg[:lastSlashIndex+1]
+					dir = filepath.Join(currentDir, relativePath)
+					prefix = lastArg[lastSlashIndex+1:]
+				} else {
+					dir = currentDir
+					prefix = lastArg
+				}
+			} else {
+				dir = currentDir
+				prefix = lastArg
+			}
 		}
 	} else {
 		// Handle local file completion
@@ -386,14 +457,16 @@ func (m *MqttServerChat) parseInputPath(partialInput string, currentDir string) 
 		prefix = partialInput
 	}
 
-	if dir == "" {
-		dir = "./"
+	// Verifica che la directory esista
+	if fileInfo, err := os.Stat(dir); err != nil || !fileInfo.IsDir() {
+		dir = currentDir
 	}
 
 	return dir, prefix
 }
 
-// GetClientState retrieves the state of a client.
+// GetClientState retrieves the state of a client without creating it if it doesn't exist.
+// Returns the client state and a boolean indicating if the client exists.
 func (m *MqttServerChat) GetClientState(clientUUID string) (*ClientState, bool) {
 	state, ok := m.clientStates.Load(clientUUID)
 	if !ok {
@@ -407,13 +480,13 @@ func (m *MqttServerChat) SetClientState(clientUUID string, state *ClientState) {
 	m.clientStates.Store(clientUUID, state)
 }
 
-// GetClientsConnected restituisce una mappa dei client attualmente connessi.
+// GetClientsConnected returns a map of currently connected clients.
 func (m *MqttServerChat) GetClientsConnected() map[string]*ClientState {
 	clients := make(map[string]*ClientState)
 	m.clientStates.Range(func(key, value interface{}) bool {
 		clientUUID := key.(string)
 		state := value.(*ClientState)
-		if time.Since(state.LastActive) <= inactivityTimeout {
+		if time.Since(state.LastActive) <= m.inactivityTimeout {
 			clients[clientUUID] = state
 		}
 		return true
@@ -421,7 +494,7 @@ func (m *MqttServerChat) GetClientsConnected() map[string]*ClientState {
 	return clients
 }
 
-// GetClients restituisce l'intera mappa dei client (connessi e non).
+// GetClients returns the entire map of clients (connected or not).
 func (m *MqttServerChat) GetClients() *sync.Map {
 	return &m.clientStates
 }
