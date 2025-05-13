@@ -22,7 +22,7 @@ func (c *ClientsCommand) handler() string {
 	// Usa un buffer invece di os.Stdout
 	var buffer bytes.Buffer
 	table := tablewriter.NewWriter(&buffer)
-	table.SetHeader([]string{"UUID", "Directory", "Status", "Last Activity"})
+	table.Header([]string{"UUID", "Directory", "Status", "Last Activity"})
 
 	// Aggiungi le righe alla tabella
 	for clientUUID, state := range clients {
