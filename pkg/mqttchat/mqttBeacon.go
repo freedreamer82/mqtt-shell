@@ -153,8 +153,13 @@ func (b *BeaconDiscovery) onBeaconDiscovery(client MQTT.Client, msg MQTT.Message
 			b.clients <- c
 		}
 
-		fmt.Printf("Ip: %15s - Id: %20s - Version: %10s - Time: %s - Uptime: %s \r\n", jData.Ip, nodeId, jData.Version, jData.Datetime, jData.Data)
-	}
+		uptimeDuration, err := time.ParseDuration(jData.Data)
+		if err != nil {
+			log.Errorln("error parsing uptime duration:", err)
+			return
+		}
+		formattedUptime := fmt.Sprintf("%d days %02d:%02d", int(uptimeDuration.Hours())/24, int(uptimeDuration.Hours())%24, int(uptimeDuration.Minutes())%60)
+		fmt.Printf("Ip: %15s - Id: %20s - Version: %10s - Time: %s - Uptime: %s \r\n", jData.Ip, nodeId, jData.Version, jData.Datetime, formattedUptime)	}
 
 }
 
