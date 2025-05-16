@@ -61,7 +61,9 @@ func (s *MainScreen) Read(p []byte) (n int, err error) {
 		data := s.input.Text + "\n"
 		if len(data) != 0 {
 			n = copy(p, data)
-			s.input.SetText("")
+			fyne.DoAndWait(func() {
+				s.input.SetText("")
+			})
 			return len(data), nil
 		} else if len(p) == 0 {
 			// If the caller wanted a zero byte read, return immediately
@@ -102,8 +104,11 @@ func (s *MainScreen) Write(p []byte) (n int, err error) {
 	}
 
 	s.inputText = text
-	s.shell.SetText(text)
-	s.scroll.ScrollToBottom()
+
+	fyne.Do(func() {
+		s.shell.SetText(text)
+		s.scroll.ScrollToBottom()
+	})
 
 	return len(p), nil
 }

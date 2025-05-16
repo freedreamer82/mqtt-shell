@@ -6,7 +6,7 @@ toolchain go1.23.1
 
 require (
 	fyne.io/fyne/v2 v2.6.1
-	github.com/alecthomas/kong v1.10.0
+	github.com/alecthomas/kong v1.11.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/lithammer/shortuuid/v3 v3.0.7

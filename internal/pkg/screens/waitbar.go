@@ -33,8 +33,10 @@ func (w *WaitBar) Visible() bool {
 }
 
 func (w *WaitBar) Hide() {
+
 	w.progressBar.Stop()
 	w.progressBarPopUp.Hide()
+
 }
 
 func (w *WaitBar) Resize(size fyne.Size) {
