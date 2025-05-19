@@ -114,6 +114,10 @@ func (m *MqttClientChat) sendPing() {
 
 // IsServerConnected checks if the MQTT client is connected to the server.
 func (m *MqttClientChat) IsServerConnected() bool {
+	if m.worker == nil || m.worker.GetMqttClient() == nil {
+		return false
+	}
+
 	return m.worker.GetMqttClient().IsConnected()
 }
 
@@ -329,7 +333,7 @@ func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string,
 	}
 
 	// Configure the MQTT chat
-	chat := NewChat(mqttOpts, rxTopic, txTopic, version)
+	chat := NewChat(mqttOpts, rxTopic, txTopic, version, WithOptionChatUUID(cc.uuid))
 	cc.MqttChat = chat
 	chat.SetDataCallback(cc.OnDataRx)
 	chat.worker.GetOpts().SetOrderMatters(true)
@@ -390,7 +394,7 @@ func NewClientChatWithCustomIO(mqttOpts *MQTT.ClientOptions, rxTopic string, txT
 	}
 
 	// Configure the MQTT chat
-	chat := NewChat(mqttOpts, rxTopic, txTopic, version)
+	chat := NewChat(mqttOpts, rxTopic, txTopic, version, WithOptionChatUUID(cc.uuid))
 	cc.MqttChat = chat
 	chat.SetDataCallback(cc.OnDataRx)
 	cc.waitServerChan = make(chan bool)
