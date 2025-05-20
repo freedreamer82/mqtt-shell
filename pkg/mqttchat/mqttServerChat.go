@@ -353,7 +353,7 @@ func (m *MqttServerChat) generateAutocompleteOptions(partialInput string, curren
 		out := m.listFilesInDir(dir, prefix)
 
 		if len(out) > 0 {
-			out = strings.ReplaceAll(out, dir, "")
+			out = strings.TrimPrefix(out, dir)
 			out = strings.TrimLeft(out, "/")
 			return out
 		}
