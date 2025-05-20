@@ -14,10 +14,10 @@ import (
 )
 
 const (
-	pluginCmdPrefix   = "plugin"        // Prefix for plugin commands
-	outputMsgSize     = 1000            // Size of the output message channel (ridotto)
-	inactivityTimeout = 3 * time.Minute // Timeout for client inactivity
-	MaxOptionsSize    = 90              // Max number of autocomplete options
+	pluginCmdPrefix   = "mqtt-shell-plugin" // Prefix for plugin commands
+	outputMsgSize     = 1000                // Size of the output message channel (ridotto)
+	inactivityTimeout = 3 * time.Minute     // Timeout for client inactivity
+	MaxOptionsSize    = 90                  // Max number of autocomplete options
 )
 
 // ClientState represents the state of a connected client.
