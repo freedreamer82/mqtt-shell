@@ -434,22 +434,34 @@ type dynamicCompleter struct {
 }
 
 func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length int) {
-	if pos < 0 || pos > len(line) { // Ensure pos is valid
+	if pos < 0 || pos > len(line) {
 		return nil, 0
 	}
 
-	options := d.getOptions(string(line))
+	words := strings.Fields(string(line))
+	input := ""
+	if len(words) > 0 {
+		input = words[len(words)-1]
+	}
+	options := d.getOptions(input)
 	var result [][]rune
-	for _, opt := range options {
-		result = append(result, []rune(opt))
+
+	for i := range options {
+		if strings.HasPrefix(options[i], input) {
+			suffix := options[i][len(input):]
+			if len(suffix) > 0 {
+				result = append(result, []rune(suffix))
+			} else {
+				result = append(result, []rune(" "))
+			}
+		} else if len(options[i]) > 0 {
+			result = append(result, []rune(options[i]))
+		}
 	}
 
-	if len(result) > 0 {
-		commonPrefix := result[0]
-		for _, opt := range result {
-			commonPrefix = commonPrefix[:commonPrefixLength(commonPrefix, opt)]
-		}
-		length = len(commonPrefix)
+	// Calcola la lunghezza del prefisso comune tra input e il primo suggerimento (se presente)
+	if len(options) > 0 {
+		length = commonPrefixLength([]rune(input), []rune(options[0]))
 	} else {
 		length = 0
 	}

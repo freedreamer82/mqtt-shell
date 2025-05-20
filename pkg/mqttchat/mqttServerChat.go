@@ -74,7 +74,8 @@ func NewServerChat(mqttOpts *MQTT.ClientOptions, topics ServerTopic, version str
 		shutdown:          make(chan struct{}),
 	}
 
-	chat := NewChat(mqttOpts, topics.RxTopic, topics.TxTopic, version, WithOptionBeaconTopic(topics.BeaconRxTopic, topics.BeaconTxTopic))
+	chat := NewChat(mqttOpts, topics.RxTopic, topics.TxTopic, version,
+		WithOptionBeaconTopic(topics.BeaconRxTopic, topics.BeaconTxTopic))
 	chat.SetDataCallback(sc.OnDataRx)
 	sc.MqttChat = chat
 
@@ -338,14 +339,34 @@ func WithOptionNetworkInterface(netI string) MqttServerChatOption {
 	}
 }
 
-// generateAutocompleteOptions generates autocomplete options for a given input.
 func (m *MqttServerChat) generateAutocompleteOptions(partialInput string, currentDir string) string {
-	if partialInput == "" {
+	// Se il path inizia con "/" autocompleta nella directory assoluta
+	if strings.HasPrefix(partialInput, "/") {
+		dir, prefix := m.parseInputPath(partialInput, currentDir)
+		out := m.listFilesInDir(dir, prefix)
+		return out
+	}
+
+	// Se inizia con "./" o ".", autocompleta nella currentDir
+	if partialInput == "" || strings.HasPrefix(partialInput, "./") || partialInput == "." {
 		return m.listFilesInDir(currentDir, "")
 	}
 
-	dir, prefix := m.parseInputPath(partialInput, currentDir)
-	return m.listFilesInDir(dir, prefix)
+	// Altrimenti, autocompleta usando directory di sistema
+	systemDirs := []string{"/usr/bin", "/usr/sbin", "/usr/local/bin"}
+	var options []string
+	for _, dir := range systemDirs {
+		opts := m.listFilesInDir(dir, partialInput)
+		if opts != "" {
+			options = append(options, opts)
+		}
+	}
+
+	//if len(options) == 1 {
+	//	// Se c'è solo una directory, ritorna il nome senza prefisso
+	//	return strings.TrimPrefix(options, partialInput)
+	//}
+	return strings.Join(options, "\n")
 }
 
 // listFilesInDir lists files in a directory with a given prefix.
@@ -364,8 +385,8 @@ func (m *MqttServerChat) listFilesInDir(dir string, prefix string) string {
 	var foundDir bool
 
 	for _, file := range files {
-		// Salta i file nascosti e verifica il prefisso
-		if !strings.HasPrefix(file.Name(), ".") && strings.HasPrefix(file.Name(), prefix) {
+		// Considera solo i file che non sono nascosti e che iniziano con il prefisso
+		if !strings.HasPrefix(file.Name(), ".") && (prefix == "" || strings.HasPrefix(file.Name(), prefix)) {
 			filePath := filepath.Join(dir, file.Name())
 			fileInfo, err := os.Stat(filePath)
 			if err != nil {
@@ -373,13 +394,10 @@ func (m *MqttServerChat) listFilesInDir(dir string, prefix string) string {
 			}
 
 			if fileInfo.IsDir() {
-				if prefix == file.Name() {
-					return "/"
-				}
-				options = append(options, strings.TrimPrefix(file.Name(), prefix)+"/")
+				options = append(options, file.Name()+"/")
 				foundDir = true
 			} else {
-				options = append(options, strings.TrimPrefix(file.Name(), prefix))
+				options = append(options, file.Name())
 			}
 
 			// Limita il numero di opzioni
@@ -391,7 +409,7 @@ func (m *MqttServerChat) listFilesInDir(dir string, prefix string) string {
 	}
 
 	if len(options) == 1 && foundDir {
-		return options[0]
+		return filepath.Join(dir, options[0])
 	}
 
 	return strings.Join(options, "\n")
