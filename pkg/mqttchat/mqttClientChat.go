@@ -438,7 +438,7 @@ func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length in
 		return nil, 0
 	}
 
-	words := strings.Fields(string(line))
+	words := strings.Split(string(line), " ")
 	input := ""
 	if len(words) > 0 {
 		input = words[len(words)-1]
@@ -460,7 +460,7 @@ func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length in
 	}
 
 	// Calcola la lunghezza del prefisso comune tra input e il primo suggerimento (se presente)
-	if len(options) > 0 {
+	if len(options) > 0 && !strings.HasSuffix(input, "/") {
 		length = commonPrefixLength([]rune(input), []rune(options[0]))
 	} else {
 		length = 0

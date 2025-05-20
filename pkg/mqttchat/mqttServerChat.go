@@ -348,8 +348,15 @@ func (m *MqttServerChat) generateAutocompleteOptions(partialInput string, curren
 	}
 
 	// Se inizia con "./" o ".", autocompleta nella currentDir
-	if partialInput == "" || strings.HasPrefix(partialInput, "./") || partialInput == "." {
-		return m.listFilesInDir(currentDir, "")
+	if partialInput == "" || strings.HasPrefix(partialInput, "./") || len(partialInput) > 0 {
+		dir, prefix := m.parseInputPath(partialInput, "")
+		out := m.listFilesInDir(dir, prefix)
+
+		if len(out) > 0 {
+			out = strings.ReplaceAll(out, dir, "")
+			out = strings.TrimLeft(out, "/")
+			return out
+		}
 	}
 
 	// Altrimenti, autocompleta usando directory di sistema
@@ -362,10 +369,6 @@ func (m *MqttServerChat) generateAutocompleteOptions(partialInput string, curren
 		}
 	}
 
-	//if len(options) == 1 {
-	//	// Se c'è solo una directory, ritorna il nome senza prefisso
-	//	return strings.TrimPrefix(options, partialInput)
-	//}
 	return strings.Join(options, "\n")
 }
 
@@ -409,7 +412,12 @@ func (m *MqttServerChat) listFilesInDir(dir string, prefix string) string {
 	}
 
 	if len(options) == 1 && foundDir {
-		return filepath.Join(dir, options[0])
+		path := filepath.Join(dir, options[0])
+		// Assicurati che finisca con /
+		if !strings.HasSuffix(path, "/") {
+			path += "/"
+		}
+		return path
 	}
 
 	return strings.Join(options, "\n")
