@@ -63,6 +63,7 @@ type MqttChat struct {
 	startTime          time.Time
 	isRunning          bool
 	netInterface       string
+	chatUuid           string
 }
 
 // Costruttore con tutti i campi
@@ -110,6 +111,10 @@ func (m *MqttChat) transmit(out string, cmdUuid string, clientUuid string, custo
 	if cmdUuid == "" {
 		//generate one random..
 		cmdUuid = shortuuid.New()
+	}
+
+	if clientUuid == "" {
+		clientUuid = m.chatUuid
 	}
 
 	now := time.Now().Format(time.DateTime)
@@ -218,6 +223,8 @@ func (m *MqttChat) sendBeacon() {
 		now := time.Now().Format(time.DateTime)
 		fromNow := fmtDuration(m.uptime())
 		reply := MqttJsonData{Ip: m.getIpAddress(), Version: m.version, Cmd: "beacon", Datetime: now, Data: fromNow}
+		//get unique chat id can not be clientUUID
+		reply.ClientUUID = m.chatUuid
 
 		b, err := json.Marshal(reply)
 		if err != nil {
@@ -233,6 +240,12 @@ type MqttChatOption func(*MqttChat)
 func WithOptionTimeoutCmd(timeout time.Duration) MqttChatOption {
 	return func(h *MqttChat) {
 		h.timeoutCmdShell = timeout
+	}
+}
+
+func WithOptionChatUUID(uuid string) MqttChatOption {
+	return func(h *MqttChat) {
+		h.chatUuid = uuid
 	}
 }
 
@@ -257,6 +270,7 @@ func NewChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txtopic string, versi
 		beaconTopic: "", Cb: nil, isRunning: false, netInterface: ""}
 
 	m.startTime = time.Now()
+	m.chatUuid = shortuuid.New()
 	m.timeoutCmdShell = defaultTimeoutCmd
 	for _, opt := range opts {
 		// Call the option giving the instantiated
