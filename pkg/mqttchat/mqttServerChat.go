@@ -54,9 +54,20 @@ type MqttServerChat struct {
 	inactivityTimeout time.Duration         // Timeout for client inactivity
 	netInterface      string                // Network interface to use
 	shutdown          chan struct{}         // Channel to signal shutdown
+	systemDirs        []string              // List of system directories for autocomplete
+}
+
+var defaultSystemDirs = []string{
+	"/usr/bin", "/usr/sbin", "/usr/local/bin",
 }
 
 type MqttServerChatOption func(*MqttServerChat)
+
+func WithOptionAutoCompleteDirs(dirs []string) MqttServerChatOption {
+	return func(m *MqttServerChat) {
+		m.systemDirs = dirs
+	}
+}
 
 // NewServerChat creates a new MQTT server chat instance.
 func NewServerChat(mqttOpts *MQTT.ClientOptions, topics ServerTopic, version string, opts ...MqttServerChatOption) *MqttServerChat {
@@ -72,6 +83,7 @@ func NewServerChat(mqttOpts *MQTT.ClientOptions, topics ServerTopic, version str
 		inactivityTimeout: inactivityTimeout,
 		currentDir:        currentDir,
 		shutdown:          make(chan struct{}),
+		systemDirs:        defaultSystemDirs,
 	}
 
 	chat := NewChat(mqttOpts, topics.RxTopic, topics.TxTopic, version,
@@ -359,10 +371,8 @@ func (m *MqttServerChat) generateAutocompleteOptions(partialInput string, curren
 		}
 	}
 
-	// Altrimenti, autocompleta usando directory di sistema
-	systemDirs := []string{"/usr/bin", "/usr/sbin", "/usr/local/bin"}
 	var options []string
-	for _, dir := range systemDirs {
+	for _, dir := range m.systemDirs {
 		opts := m.listFilesInDir(dir, partialInput)
 		if opts != "" {
 			options = append(options, opts)
