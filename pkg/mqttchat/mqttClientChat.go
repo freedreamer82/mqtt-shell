@@ -446,22 +446,32 @@ func (d *dynamicCompleter) Do(line []rune, pos int) (newLine [][]rune, length in
 	options := d.getOptions(input)
 	var result [][]rune
 
-	for i := range options {
-		if strings.HasPrefix(options[i], input) {
-			suffix := options[i][len(input):]
-			if len(suffix) > 0 {
-				result = append(result, []rune(suffix))
-			} else {
-				result = append(result, []rune(" "))
-			}
-		} else if len(options[i]) > 0 {
-			result = append(result, []rune(options[i]))
-		}
-	}
-
-	// Calcola la lunghezza del prefisso comune tra input e il primo suggerimento (se presente)
-	if len(options) > 0 && !strings.HasSuffix(input, "/") {
+	if len(options) > 0 {
+		// Calculate the length of the common prefix between input and the first suggestion
 		length = commonPrefixLength([]rune(input), []rune(options[0]))
+		for i := range options {
+			lastSlash := strings.LastIndex(input, "/")
+			prefix := ""
+			if lastSlash != -1 {
+				prefix = input[:lastSlash+1]
+			}
+			inputSuffix := input[lastSlash+1:]
+			optionSuffix := options[i]
+			if strings.HasPrefix(optionSuffix, prefix) {
+				optionSuffix = optionSuffix[lastSlash+1:]
+			}
+			if strings.HasPrefix(optionSuffix, inputSuffix) {
+				suffix := optionSuffix[len(inputSuffix):]
+				// Only add the space if the suffix is not already empty
+				if len(options) > 1 {
+					length = len(inputSuffix)
+					//prefix == string fino a ultimo slash
+					result = append(result, []rune(suffix))
+				} else if len(suffix) > 0 {
+					result = append(result, []rune(suffix))
+				}
+			}
+		}
 	} else {
 		length = 0
 	}
