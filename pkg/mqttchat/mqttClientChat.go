@@ -249,8 +249,9 @@ func (m *MqttClientChat) clientTask() {
 		line, err := m.rl.Readline()
 		if err != nil { // Ctrl+D or Ctrl+C to exit
 			if err.Error() == "EOF" || err.Error() == "interrupt" {
-				log.Info("Exiting...")
-				break
+				//log.Info("Exiting...")
+				//break
+				continue
 			}
 			fmt.Println("Goodbye!")
 			os.Exit(0)
@@ -287,12 +288,12 @@ func (m *MqttClientChat) SetHistoryFile(file string, limit int) {
 
 	// Reinitialize readline with the new history file and limit
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          prompt,
-		HistoryFile:     m.historyFile,
-		HistoryLimit:    m.historyLimit,
-		AutoComplete:    m.setupDynamicAutocompletion(),
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
+		Prompt:       prompt,
+		HistoryFile:  m.historyFile,
+		HistoryLimit: m.historyLimit,
+		AutoComplete: m.setupDynamicAutocompletion(),
+		//	InterruptPrompt: "^C",
+		//	EOFPrompt:       "exit",
 		FuncIsTerminal: func() bool {
 			return true
 		},
@@ -341,12 +342,12 @@ func NewClientChat(mqttOpts *MQTT.ClientOptions, rxTopic string, txTopic string,
 
 	// Initialize readline with default values
 	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          promptColor,
-		HistoryFile:     cc.historyFile,
-		HistoryLimit:    cc.historyLimit,
-		AutoComplete:    cc.setupDynamicAutocompletion(),
-		InterruptPrompt: "^C",
-		EOFPrompt:       "exit",
+		Prompt:       promptColor,
+		HistoryFile:  cc.historyFile,
+		HistoryLimit: cc.historyLimit,
+		AutoComplete: cc.setupDynamicAutocompletion(),
+		//InterruptPrompt: "^C",
+		//EOFPrompt:       "exit",
 		FuncIsTerminal: func() bool {
 			return true
 		},
