@@ -14,6 +14,7 @@ type MqttSeverChatPlugin interface {
 	PluginId() string
 	OnDataRx(data MqttJsonData)
 	GetName() string
+	GetPrompt() string
 }
 
 func (m *MqttServerChat) isPluginConfigCmd(str string) (bool, []string, int) {
@@ -46,7 +47,7 @@ func (m *MqttServerChat) handlePluginConfigCmd(state *ClientState, args []string
 	} else if argsLen == 1 && args[0] == "off" {
 		return m.stopPlugin(state), ""
 	}
-	return "plugin command not valid, try > plugin help", activePlugin
+	return fmt.Sprintf("%s command not valid, try > %s help", pluginCmdPrefix, pluginCmdPrefix), activePlugin
 }
 
 func (m *MqttServerChat) startPlugin(state *ClientState, plugin string) (string, string) {
@@ -54,6 +55,7 @@ func (m *MqttServerChat) startPlugin(state *ClientState, plugin string) (string,
 	if m.existPlugin(plugin) {
 		if !hasPluginActive {
 			state.PluginId = plugin
+			m.autocompleteEnabled = false
 			return fmt.Sprintf("start plugin %s ...", plugin), plugin
 		}
 		return "stop current plugin before starting another one", currentPlugin
@@ -64,6 +66,7 @@ func (m *MqttServerChat) startPlugin(state *ClientState, plugin string) (string,
 func (m *MqttServerChat) stopPlugin(state *ClientState) string {
 	if plugin, hasPluginActive := state.hasActivePlugin(); hasPluginActive {
 		state.PluginId = ""
+		m.autocompleteEnabled = true
 		return fmt.Sprintf("stop plugin %s ...", plugin)
 	}
 	return "no active plugin found"

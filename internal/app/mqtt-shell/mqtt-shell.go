@@ -9,6 +9,7 @@ import (
 	"github.com/freedreamer82/mqtt-shell/pkg/info"
 	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 	"github.com/freedreamer82/mqtt-shell/pkg/mqttcp"
+	"github.com/freedreamer82/mqtt-shell/pkg/plugins/sshbridge"
 	"github.com/freedreamer82/mqtt-shell/pkg/plugins/telnetbridge"
 	log "github.com/sirupsen/logrus"
 	"strings"
@@ -24,7 +25,11 @@ func RunServer(mqttOpts *MQTT.ClientOptions, conf *config.Config) {
 	var chat *mqttchat.MqttServerChat
 
 	if conf.TelnetBridgePlugin.Enabled {
-		chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION, netIOpt, telnetbridge.WithTelnetBridge(conf.TelnetBridgePlugin.MaxConnections, conf.TelnetBridgePlugin.Keyword))
+		chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION, netIOpt,
+			telnetbridge.WithTelnetBridge(conf.TelnetBridgePlugin.MaxConnections, conf.TelnetBridgePlugin.Keyword),
+			sshbridge.WithSSHBridge(conf.SSHBridgePlugin.MaxConnections, conf.SSHBridgePlugin.Keyword),
+		)
+		//mqttchat.WithOptionAutoCompleteDirs([]string{"/usr"}))
 	} else {
 		chat = mqttchat.NewServerChat(mqttOpts, topic, info.VERSION, netIOpt)
 	}

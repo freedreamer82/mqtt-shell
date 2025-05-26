@@ -31,10 +31,18 @@ type TelnetBridge struct {
 	telnetConnections sync.Map
 	maxConnections    int
 	chOut             chan mqttchat.OutMessage
+	prompt            string
 }
 
 func (t *TelnetBridge) PluginId() string {
 	return t.pluginName
+}
+
+func (t *TelnetBridge) GetPrompt() string {
+	if t.prompt == "" {
+		t.prompt = t.pluginName
+	}
+	return t.prompt
 }
 
 type mqtt2telnetConnection struct {
@@ -83,7 +91,7 @@ func (t *TelnetBridge) OnDataRx(data mqttchat.MqttJsonData) {
 		// telnet direct command but not connected
 		value, ok := t.telnetConnections.Load(data.ClientUUID)
 		if !ok {
-			t.post(fmt.Sprintf("connection not established - try: %s help", t.pluginName), data.ClientUUID, data.CmdUUID)
+			t.post(fmt.Sprintf("SSH plugin connection not established - try: %s help", t.pluginName), data.ClientUUID, data.CmdUUID)
 			return
 		}
 
@@ -147,14 +155,14 @@ func (t *TelnetBridge) exec(mqttClientId string, args []string, argsLen int) str
 		})
 		return res
 	} else if argsLen == 1 && args[0] == "help" {
-		return getHelpText(t.pluginName)
+		return getTelnetHelpText(t.pluginName)
 	} else if argsLen == 3 && args[0] == "connect" {
 		return t.startTelnetConnection(mqttClientId, args[1], args[2])
 	} else if argsLen == 1 && args[0] == "disconnect" {
 		go t.stopTelnetConnection(mqttClientId, false)
 		return ""
 	}
-	return getErrorText(t.pluginName)
+	return getTelnetErrorText(t.pluginName)
 }
 
 func (t *TelnetBridge) startTelnetConnection(mqttClientId, host, port string) string {
@@ -283,6 +291,7 @@ func (t *TelnetBridge) post(msg, mqttClientId, mqttCmdId string) {
 	if isConnected {
 		prompt = fmt.Sprintf("%s - %s", t.pluginName, host)
 	}
+	t.prompt = prompt
 	out := mqttchat.NewOutMessageWithPrompt(msg, mqttClientId, mqttCmdId, prompt)
 	t.chOut <- out
 }

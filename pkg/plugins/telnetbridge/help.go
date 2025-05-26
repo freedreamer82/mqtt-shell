@@ -9,10 +9,10 @@ const helpText = "Mqtt 2 Telnet Bridge: \n" +
 
 const errorText = "***: command not valid, try > *** help"
 
-func getHelpText(pluginName string) string {
+func getTelnetHelpText(pluginName string) string {
 	return strings.Replace(helpText, "***", pluginName, -1)
 }
 
-func getErrorText(pluginName string) string {
+func getTelnetErrorText(pluginName string) string {
 	return strings.Replace(errorText, "***", pluginName, -1)
 }

@@ -144,6 +144,7 @@ type Config struct {
 	BeaconResponseTopic string
 	TimeoutBeaconSec    uint64
 	TelnetBridgePlugin  TelnetBridgePluginConfig
+	SSHBridgePlugin     SSHBridgePluginConfig
 	SSHConsole          SSHConsole
 	Network             Network
 	Cp                  CpConfig
@@ -180,6 +181,12 @@ type TelnetBridgePluginConfig struct {
 	MaxConnections int
 }
 
+type SSHBridgePluginConfig struct {
+	Enabled        bool
+	Keyword        string
+	MaxConnections int
+}
+
 // / NewConfig creates a new configuration structure
 // / filled with default options
 func NewConfig() Config {
@@ -195,6 +202,7 @@ func NewConfig() Config {
 		BeaconResponseTopic: BeaconReplyTopic, //getBeaconTopic("+"),
 		TimeoutBeaconSec:    10,
 		TelnetBridgePlugin:  TelnetBridgePluginConfig{Enabled: false, Keyword: "telnet", MaxConnections: 5},
+		SSHBridgePlugin:     SSHBridgePluginConfig{Enabled: false, Keyword: "ssh", MaxConnections: 5},
 		Cp:                  NewDefaultCpConfig(addr),
 	}
 }

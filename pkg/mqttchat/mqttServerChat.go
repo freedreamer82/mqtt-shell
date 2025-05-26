@@ -47,14 +47,15 @@ type ServerTopic struct {
 // MqttServerChat represents the MQTT server chat with plugin support and directory context.
 type MqttServerChat struct {
 	*MqttChat
-	plugins           []MqttSeverChatPlugin // List of plugins , each client can have 1 plugin at time (stored in client state)
-	outputChan        chan OutMessage       // Channel for outgoing messages
-	clientStates      sync.Map              // Map to store client states
-	currentDir        string                // Default directory for the server
-	inactivityTimeout time.Duration         // Timeout for client inactivity
-	netInterface      string                // Network interface to use
-	shutdown          chan struct{}         // Channel to signal shutdown
-	systemDirs        []string              // List of system directories for autocomplete
+	plugins             []MqttSeverChatPlugin // List of plugins , each client can have 1 plugin at time (stored in client state)
+	outputChan          chan OutMessage       // Channel for outgoing messages
+	clientStates        sync.Map              // Map to store client states
+	currentDir          string                // Default directory for the server
+	inactivityTimeout   time.Duration         // Timeout for client inactivity
+	netInterface        string                // Network interface to use
+	shutdown            chan struct{}         // Channel to signal shutdown
+	systemDirs          []string              // List of system directories for autocomplete
+	autocompleteEnabled bool
 }
 
 var defaultSystemDirs = []string{
@@ -79,11 +80,12 @@ func NewServerChat(mqttOpts *MQTT.ClientOptions, topics ServerTopic, version str
 	}
 
 	sc := MqttServerChat{
-		outputChan:        make(chan OutMessage, outputMsgSize),
-		inactivityTimeout: inactivityTimeout,
-		currentDir:        currentDir,
-		shutdown:          make(chan struct{}),
-		systemDirs:        defaultSystemDirs,
+		outputChan:          make(chan OutMessage, outputMsgSize),
+		inactivityTimeout:   inactivityTimeout,
+		currentDir:          currentDir,
+		shutdown:            make(chan struct{}),
+		systemDirs:          defaultSystemDirs,
+		autocompleteEnabled: true,
 	}
 
 	chat := NewChat(mqttOpts, topics.RxTopic, topics.TxTopic, version,
@@ -177,10 +179,24 @@ func (m *MqttServerChat) handlePing(data MqttJsonData, state *ClientState) {
 	m.sendPong(data.CmdUUID, data.ClientUUID)
 }
 
-// handleAutocomplete handles autocomplete requests from clients.
 func (m *MqttServerChat) handleAutocomplete(data MqttJsonData, state *ClientState) {
+	if !m.autocompleteEnabled {
+		responseData := NewMqttJsonDataEmpty()
+		responseData.Data = ""
+		responseData.CmdUUID = data.CmdUUID
+		responseData.ClientUUID = state.ClientUUID
+		responseData.CurrentPath = state.CurrentDir
+		responseData.Cmd = MSG_DATA_TYPE_CMD_AUTOCOMPLETE
+		if state.PluginId != "" {
+			p := m.getPluginById(state.PluginId)
+			if p != nil {
+				responseData.CustomPrompt = p.GetPrompt()
+			}
+		}
+		m.Transmit(responseData)
+		return
+	}
 	partialInput := fmt.Sprintf("%v", data.Data)
-
 	options := m.generateAutocompleteOptions(partialInput, state.CurrentDir)
 	responseData := NewMqttJsonDataEmpty()
 	responseData.Data = options
@@ -189,6 +205,16 @@ func (m *MqttServerChat) handleAutocomplete(data MqttJsonData, state *ClientStat
 	responseData.CurrentPath = state.CurrentDir
 	responseData.Cmd = MSG_DATA_TYPE_CMD_AUTOCOMPLETE
 	m.Transmit(responseData)
+}
+
+// getPluginById restituisce il plugin attivo dato il suo ID.
+func (m *MqttServerChat) getPluginById(pluginId string) MqttSeverChatPlugin {
+	for _, p := range m.plugins {
+		if p.PluginId() == pluginId {
+			return p
+		}
+	}
+	return nil
 }
 
 // handleCommand handles generic commands from clients.
