@@ -34,6 +34,7 @@ show_help() {
     echo "  -m, --mode MODE       Compilation mode (default: hybrid)"
     echo "  -d, --output-dir DIR  Output directory (default: ./dist)"
     echo "  -f, --fyne-cross      Use fyne-cross for GUI applications"
+    echo "  -p, --parameters \"PARAMS\"  Extra parameters to pass to the build command"
     echo "  -c, --clean           Clean output directory before build"
     echo "  -l, --list            List all available options"
     echo "  -h, --help            Show this help message"
@@ -174,6 +175,7 @@ build_with_go() {
     local arch=$2
     local mode=$3
     local output_dir=$4
+    local extra_parameters=$5
     
     local source_dir=$(get_source_dir $mode)
     local filename=$(generate_filename $os $arch $mode)
@@ -188,7 +190,7 @@ build_with_go() {
     export GOARCH=$arch
     
     # Build the application
-    if go build -o "$output_path" -ldflags '-w -s' "$source_dir"; then
+    if go build $extra_parameters -o "$output_path" -ldflags '-w -s' "$source_dir"; then
         print_success "Built: $output_path"
         return 0
     else
@@ -203,6 +205,7 @@ build_with_fyne_cross() {
     local arch=$2
     local mode=$3
     local output_dir=$4
+    local extra_parameters=$5
     
     local source_dir=$(get_source_dir $mode)
     local app_id="com.mqttshell"
@@ -253,7 +256,7 @@ build_with_fyne_cross() {
     fi
     
     # Execute fyne-cross
-    if "$fyne_cross_path" "$os" "${fyne_args[@]}" "$source_dir"; then
+    if "$fyne_cross_path" "$os" "${fyne_args[@]}" $extra_parameters "$source_dir"; then
         print_success "Built with fyne-cross for $os"
         
         # Move files to output directory if different
@@ -276,6 +279,7 @@ build_application() {
     local mode=$3
     local output_dir=$4
     local use_fyne_cross=$5
+    local extra_parameters=$6
 
     # Validate combination
     if ! validate_combination "$os" "$arch" "$mode"; then
@@ -287,9 +291,9 @@ build_application() {
     
     # Choose build method
     if [ "$use_fyne_cross" == "true" ] || [ "$os" == "android" ] || [ "$os" == "ios" ]; then
-        build_with_fyne_cross "$os" "$arch" "$mode" "$output_dir"
+        build_with_fyne_cross "$os" "$arch" "$mode" "$output_dir" "$extra_parameters"
     else
-        build_with_go "$os" "$arch" "$mode" "$output_dir"
+        build_with_go "$os" "$arch" "$mode" "$output_dir" "$extra_parameters"
     fi
 }
 
@@ -301,6 +305,7 @@ parse_args() {
     local output_dir=$DEFAULT_OUTPUT_DIR
     local use_fyne_cross=$DEFAULT_USE_FYNE_CROSS
     local clean=false
+    local extra_parameters=""
     
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -337,6 +342,10 @@ parse_args() {
                 mode="gui-only"
                 use_fyne_cross=true
                 shift
+                ;;
+            -p|--parameters)
+                extra_parameters="$2"
+                shift 2
                 ;;
             -c|--clean)
                 clean=true
@@ -380,7 +389,7 @@ parse_args() {
     # Check dependencies before building
     check_gui_dependencies "$os" "$mode"
     
-    build_application "$os" "$arch" "$mode" "$output_dir" "$use_fyne_cross"
+    build_application "$os" "$arch" "$mode" "$output_dir" "$use_fyne_cross" "$extra_parameters"
 }
 
 # Check system dependencies for GUI builds
