@@ -1,8 +1,11 @@
 package sshbridge
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
@@ -16,6 +19,14 @@ import (
 const defaultSSHBridgePluginName = "ssh"
 const timeoutCheckConnection = 10 * time.Second
 const timeoutConnection = 1 * time.Minute
+
+type params struct {
+	command string
+	rawmode bool
+	user    string
+	host    string
+	port    int
+}
 
 type SSHBridge struct {
 	pluginName     string
@@ -34,11 +45,20 @@ func (s *SSHBridge) GetPrompt() string {
 
 type mqtt2sshConnection struct {
 	client          *ssh.Client
+	session         *ssh.Session
+	stdinPipe       io.WriteCloser
+	stdoutPipe      io.Reader
+	outputChan      chan string
 	mqttClientID    string
 	sshHost         string
 	lastCommandId   string
 	lastCommandTime time.Time
 	mutex           sync.Mutex
+	stdoutCancel    context.CancelFunc
+	removeEcho      bool
+	params          params
+	rawmode         bool
+	echorawmode     bool
 }
 
 func WithSSHBridge(maxConnections int, keyword string) mqttchat.MqttServerChatOption {
@@ -74,6 +94,7 @@ func (s *SSHBridge) OnDataRx(data mqttchat.MqttJsonData) {
 		isBridgeCmd, args, argsLen := s.isSSHBridgeCommand(str)
 		if isBridgeCmd {
 			s.post(s.exec(data.ClientUUID, args, argsLen), data.ClientUUID, data.CmdUUID)
+			str = ""
 			return
 		}
 		value, ok := s.sshConnections.Load(data.ClientUUID)
@@ -81,20 +102,18 @@ func (s *SSHBridge) OnDataRx(data mqttchat.MqttJsonData) {
 			s.post(fmt.Sprintf("SSH plugin connection not established - try: %s help", s.pluginName), data.ClientUUID, data.CmdUUID)
 			return
 		}
-		mqtt2ssh, ok := value.(mqtt2sshConnection)
+		mqtt2ssh, ok := value.(*mqtt2sshConnection)
 		if !ok {
 			s.post("invalid connection type", data.ClientUUID, data.CmdUUID)
 			return
 		}
-		s.updateTimeOnCommand(&mqtt2ssh, data.CmdUUID)
-		output, err := s.runSSHCommand(&mqtt2ssh, str)
+		s.updateTimeOnCommand(mqtt2ssh, data.CmdUUID)
+		err := s.sendCommand(mqtt2ssh, str)
 		if err != nil {
 			if strings.Contains(err.Error(), "connection lost") || strings.Contains(err.Error(), "EOF") {
 				s.stopSSHConnection(data.ClientUUID, true)
 			}
 			s.post(err.Error(), data.ClientUUID, data.CmdUUID)
-		} else {
-			s.post(output, data.ClientUUID, data.CmdUUID)
 		}
 	}()
 }
@@ -104,13 +123,13 @@ func (s *SSHBridge) updateTimeOnCommand(mqtt2ssh *mqtt2sshConnection, lastComman
 	mqtt2ssh.lastCommandId = lastCommandId
 	mqtt2ssh.lastCommandTime = time.Now()
 	mqtt2ssh.mutex.Unlock()
-	s.sshConnections.Store(mqtt2ssh.mqttClientID, *mqtt2ssh)
+	s.sshConnections.Store(mqtt2ssh.mqttClientID, mqtt2ssh)
 }
 
 func (s *SSHBridge) isClientConnected(mqttClientId string) (bool, string) {
 	conn, ok := s.sshConnections.Load(mqttClientId)
 	if ok {
-		connection := conn.(mqtt2sshConnection)
+		connection := conn.(*mqtt2sshConnection)
 		return ok, connection.sshHost
 	}
 	return ok, ""
@@ -120,7 +139,7 @@ func (s *SSHBridge) isHostAlreadyConnected(host string) (bool, string) {
 	isConnected := false
 	mqttClientId := ""
 	s.sshConnections.Range(func(k, v interface{}) bool {
-		connection := v.(mqtt2sshConnection)
+		connection := v.(*mqtt2sshConnection)
 		if connection.sshHost == host {
 			isConnected = true
 			mqttClientId = connection.mqttClientID
@@ -140,21 +159,14 @@ func (s *SSHBridge) countConnections() int {
 }
 
 func (s *SSHBridge) exec(mqttClientId string, args []string, argsLen int) string {
-	if argsLen == 1 && args[0] == "list" {
-		res := "Active ssh connections: ... "
-		s.sshConnections.Range(func(k, v interface{}) bool {
-			connection := v.(mqtt2sshConnection)
-			res = fmt.Sprintf("%s\r\n%s - %s", res, connection.mqttClientID, connection.sshHost)
-			return true
-		})
-		return res
-	} else if argsLen == 1 && args[0] == "help" {
+	var keyPath, password string
+
+	if argsLen == 1 && args[0] == "help" {
 		return getSSHHelpText(s.pluginName)
 	} else if argsLen >= 2 && isUserAtHost(args[0]) {
 		userHost := args[0]
 		port := "22"
-		password := ""
-		keyPath := ""
+		rawMode := false
 		i := 1
 		for i < argsLen {
 			switch args[i] {
@@ -172,6 +184,9 @@ func (s *SSHBridge) exec(mqttClientId string, args []string, argsLen int) string
 				} else {
 					return getSSHErrorText(s.pluginName)
 				}
+			case "--raw":
+				rawMode = true
+				i++
 			default:
 				password = args[i]
 				i++
@@ -184,16 +199,12 @@ func (s *SSHBridge) exec(mqttClientId string, args []string, argsLen int) string
 		user := userHostSplit[0]
 		host := userHostSplit[1]
 		if keyPath != "" {
-			return s.startSSHConnectionWithKey(mqttClientId, host, port, user, keyPath)
+			return s.startSSHConnectionWithKey(mqttClientId, host, port, user, keyPath, rawMode)
 		}
-		if password == "" {
-			s.post("Inserisci la password (non verrà mostrata):", mqttClientId, "")
-			return ""
-		}
-		return s.startSSHConnection(mqttClientId, host, port, user, password)
+		return s.startSSHConnection(mqttClientId, host, port, user, password, rawMode)
 	} else if argsLen == 1 && args[0] == "disconnect" {
 		go s.stopSSHConnection(mqttClientId, false)
-		return ""
+		return "disconnected"
 	}
 	return getSSHErrorText(s.pluginName)
 }
@@ -202,16 +213,16 @@ func isUserAtHost(s string) bool {
 	return strings.Count(s, "@") == 1 && !strings.Contains(s, " ")
 }
 
-func (s *SSHBridge) startSSHConnection(mqttClientId, host, port, user, password string) string {
+func (s *SSHBridge) startSSHConnection(mqttClientId, host, port, user, password string, rawmode bool) string {
 	addr := fmt.Sprintf("%s:%s", host, port)
 	isClientConnected, connectedHost := s.isClientConnected(mqttClientId)
 	if isClientConnected {
 		return fmt.Sprintf("this client is already connected to %s, disconnect before creating a new connection", connectedHost)
 	}
-	isHostConnected, connectedMqttClient := s.isHostAlreadyConnected(addr)
-	if isHostConnected {
-		return fmt.Sprintf("this host is already connected to another mqtt client: %s", connectedMqttClient)
-	}
+	//	isHostConnected, connectedMqttClient := s.isHostAlreadyConnected(addr)
+	//if isHostConnected {
+	//	return fmt.Sprintf("this host is already connected to another mqtt client: %s", connectedMqttClient)
+	//}
 	if s.countConnections() >= s.maxConnections {
 		return "max number of connection reached"
 	}
@@ -227,17 +238,23 @@ func (s *SSHBridge) startSSHConnection(mqttClientId, host, port, user, password 
 		return err.Error()
 	}
 
-	mqtt2ssh := mqtt2sshConnection{
+	mqtt2ssh := &mqtt2sshConnection{
 		mqttClientID:    mqttClientId,
 		client:          client,
 		sshHost:         addr,
 		lastCommandTime: time.Now(),
+		rawmode:         rawmode,
+		echorawmode:     false,
+	}
+	err = s.startInteractiveSession(mqtt2ssh)
+	if err != nil {
+		return fmt.Sprintf("failed to start interactive session: %v", err)
 	}
 	s.sshConnections.Store(mqttClientId, mqtt2ssh)
 	return fmt.Sprintf("connection established with %s", addr)
 }
 
-func (s *SSHBridge) startSSHConnectionWithKey(mqttClientId, host, port, user, keyPath string) string {
+func (s *SSHBridge) startSSHConnectionWithKey(mqttClientId, host, port, user, keyPath string, rawmode bool) string {
 	key, err := os.ReadFile(keyPath)
 	if err != nil {
 		return fmt.Sprintf("errore lettura chiave privata: %v", err)
@@ -269,11 +286,17 @@ func (s *SSHBridge) startSSHConnectionWithKey(mqttClientId, host, port, user, ke
 		log.Error(err.Error())
 		return err.Error()
 	}
-	mqtt2ssh := mqtt2sshConnection{
+	mqtt2ssh := &mqtt2sshConnection{
 		mqttClientID:    mqttClientId,
 		client:          client,
 		sshHost:         addr,
 		lastCommandTime: time.Now(),
+		rawmode:         rawmode,
+		echorawmode:     false,
+	}
+	err = s.startInteractiveSession(mqtt2ssh)
+	if err != nil {
+		return fmt.Sprintf("failed to start interactive session: %v", err)
 	}
 	s.sshConnections.Store(mqttClientId, mqtt2ssh)
 	return fmt.Sprintf("connection established with %s", addr)
@@ -287,20 +310,23 @@ func (s *SSHBridge) stopSSHConnection(mqttClientId string, isForTimeout bool) {
 		s.post(res, mqttClientId, "")
 		return
 	}
-	mqtt2ssh, ok := value.(mqtt2sshConnection)
+	mqtt2ssh, ok := value.(*mqtt2sshConnection)
 	if !ok {
 		res := "invalid connection type"
 		log.Error(res)
 		s.post(res, mqttClientId, "")
 		return
 	}
+	s.StopStdoutReader(mqtt2ssh)
 	if isForTimeout {
 		mqtt2ssh.mutex.Lock()
 		lastCommandId := mqtt2ssh.lastCommandId
 		mqtt2ssh.mutex.Unlock()
-		s.post("connection close due to inactivity", mqttClientId, lastCommandId)
+		s.post("connection closed due to inactivity", mqttClientId, lastCommandId)
 	}
-	_ = mqtt2ssh.client.Close()
+	if mqtt2ssh.session != nil {
+		_ = mqtt2ssh.session.Close()
+	}
 	_ = mqtt2ssh.client.Close()
 	s.sshConnections.Delete(mqttClientId)
 	mqtt2ssh.mutex.Lock()
@@ -310,115 +336,126 @@ func (s *SSHBridge) stopSSHConnection(mqttClientId string, isForTimeout bool) {
 	s.post(fmt.Sprintf("connection closed with %s", sshHost), mqttClientId, lastCommandId)
 }
 
-func (s *SSHBridge) runSSHCommand(conn *mqtt2sshConnection, cmd string) (string, error) {
-	var outBuf, errBuf bytes.Buffer
-
-	conn.mutex.Lock()
+func (s *SSHBridge) startInteractiveSession(conn *mqtt2sshConnection) error {
 	session, err := conn.client.NewSession()
-	conn.mutex.Unlock()
-
 	if err != nil {
-		log.Errorf("Errore creazione sessione SSH: %v", err)
-		return "", err
+		return err
 	}
-	defer session.Close()
-
-	// Configura i buffer per stdout e stderr separatamente
-	session.Stdout = &outBuf
-	session.Stderr = &errBuf
-
-	err = session.Run(cmd)
-
-	time.Sleep(100 * time.Millisecond)
-
-	output := outBuf.String()
-	errOutput := errBuf.String()
-
-	if errOutput != "" {
-		if output != "" {
-			output = output + "\n--- STDERR ---\n" + errOutput
-		} else {
-			output = errOutput
-		}
-	}
-
-	log.Infof("Output comando: '%s', errore: %v", output, err)
-
+	stdin, err := session.StdinPipe()
 	if err != nil {
-		if strings.Contains(err.Error(), "connection lost") || strings.Contains(err.Error(), "EOF") {
-			s.stopSSHConnection(conn.mqttClientID, true)
-			return "", fmt.Errorf("SSH connection lost, please reconnect")
-		}
-		// Se abbiamo output nonostante l'errore, restituiamolo insieme all'errore
-		if output != "" {
-			return output, nil
-		}
-		return "", err
+		return err
 	}
-
-	return output, nil
-}
-
-func (s *SSHBridge) runSSHCommandWithTimeout(conn *mqtt2sshConnection, cmd string) (string, error) {
-	var outBuf, errBuf bytes.Buffer
-
-	conn.mutex.Lock()
-	session, err := conn.client.NewSession()
-	conn.mutex.Unlock()
-
+	stdout, err := session.StdoutPipe()
 	if err != nil {
-		log.Errorf("Error while creating SSH session: %v", err)
-		return "", err
+		return err
 	}
-	defer session.Close()
+	stderr, err := session.StderrPipe()
+	if err != nil {
+		return err
+	}
+	conn.session = session
+	conn.stdinPipe = stdin
+	conn.stdoutPipe = stdout
+	conn.outputChan = make(chan string, 2000)
 
-	// Configura i buffer
-	session.Stdout = &outBuf
-	session.Stderr = &errBuf
+	// Avvia la lettura da stdout con stop gestito da context
+	s.StartStdoutReader(conn, conn.stdoutPipe)
 
-	// Esegui il comando con timeout
-	done := make(chan error, 1)
+	// Lettura riga per riga da stderr (non stoppabile qui)
 	go func() {
-		done <- session.Run(cmd)
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			s.post(line+"\r\n", conn.mqttClientID, "")
+		}
+		if err := scanner.Err(); err != nil {
+			conn.outputChan <- fmt.Sprintf("stderr error: %v", err)
+		}
 	}()
 
-	select {
-	case err = <-done:
-		// Comando completato normalmente
-	case <-time.After(30 * time.Second):
-		// Timeout del comando
-		session.Signal(ssh.SIGTERM)
-		return "", fmt.Errorf("command timeout after 30 seconds")
+	return nil
+}
+
+func (s *SSHBridge) StartStdoutReader(conn *mqtt2sshConnection, stdout io.Reader) {
+	ctx, cancel := context.WithCancel(context.Background())
+	conn.stdoutCancel = cancel
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				if !scanner.Scan() {
+					break
+				}
+				line := scanner.Text()
+				if conn.rawmode && !conn.echorawmode {
+					conn.mutex.Lock()
+					lastCmd := conn.lastCommandId
+					conn.mutex.Unlock()
+					if conn.removeEcho && strings.Contains(line, lastCmd) {
+						conn.removeEcho = false
+						continue
+					}
+				}
+				s.post(line+"\r\n", conn.mqttClientID, "")
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			s.post(fmt.Sprintf("stdout error: %v", err), conn.mqttClientID, "")
+		}
+	}()
+}
+
+func (s *SSHBridge) StopStdoutReader(conn *mqtt2sshConnection) {
+	if conn.stdoutCancel != nil {
+		conn.stdoutCancel()
+		conn.stdoutCancel = nil
+	}
+}
+
+func (s *SSHBridge) sendCommand(conn *mqtt2sshConnection, cmd string) error {
+	var err error
+
+	if !conn.rawmode {
+		var outBuf, errBuf bytes.Buffer
+
+		conn.mutex.Lock()
+		session, err := conn.client.NewSession()
+		conn.mutex.Unlock()
+
+		if err != nil {
+			log.Errorf("Errore creazione sessione SSH: %v", err)
+			return err
+		}
+		defer session.Close()
+
+		session.Stdout = &outBuf
+		session.Stderr = &errBuf
+
+		err = session.Run(cmd)
+		output := outBuf.String()
+		if err != nil {
+			output += "\n" + errBuf.String()
+			output += fmt.Sprintf("\nErrore esecuzione comando: %v", err)
+		}
+		s.post(output, conn.mqttClientID, "")
+	} else {
+		conn.mutex.Lock()
+		conn.lastCommandId = cmd
+
+		// Default: modalità interattiva
+		if !strings.HasSuffix(cmd, "\r") && !strings.HasSuffix(cmd, "\n") {
+			cmd += "\r"
+		}
+		conn.removeEcho = true
+		_, err = fmt.Fprintln(conn.stdinPipe, cmd)
+
+		conn.mutex.Unlock()
 	}
 
-	// Attendi un momento per l'output
-	time.Sleep(100 * time.Millisecond)
-
-	// Combina stdout e stderr
-	output := outBuf.String()
-	errOutput := errBuf.String()
-
-	if errOutput != "" {
-		if output != "" {
-			output = output + "\n--- STDERR ---\n" + errOutput
-		} else {
-			output = errOutput
-		}
-	}
-
-	if err != nil {
-		if strings.Contains(err.Error(), "connection lost") || strings.Contains(err.Error(), "EOF") {
-			s.stopSSHConnection(conn.mqttClientID, true)
-			return "", fmt.Errorf("SSH connection lost, please reconnect")
-		}
-		// Restituisci output + errore se disponibile
-		if output != "" {
-			return fmt.Sprintf("%s\n--- ERROR ---\n%s", output, err.Error()), nil
-		}
-		return "", err
-	}
-
-	return output, nil
+	return err
 }
 
 func (s *SSHBridge) post(msg, mqttClientId, mqttCmdId string) {
@@ -440,7 +477,7 @@ func (s *SSHBridge) timeout() {
 			log.Debug("start check timeout on connection")
 			now := time.Now()
 			s.sshConnections.Range(func(k, v interface{}) bool {
-				connection := v.(mqtt2sshConnection)
+				connection := v.(*mqtt2sshConnection)
 				connection.mutex.Lock()
 				lastCommandTime := connection.lastCommandTime
 				connection.mutex.Unlock()

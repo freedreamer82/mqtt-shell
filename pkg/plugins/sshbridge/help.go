@@ -2,12 +2,15 @@ package sshbridge
 
 import "strings"
 
-const helpText = "Mqtt 2 SSH Bridge:\n" +
-	" *** list -> show all active SSH connections\n" +
-	" *** {user}@{host} [password] [-p {port}] -> open SSH connection with password (default port 22, password will be requested if omitted)\n" +
-	" *** {user}@{host} -i {key_path} [-p {port}] -> open SSH connection with private key\n" +
-	" *** disconnect -> close SSH connection\n" +
-	" *** help -> show this help message"
+const helpText = "%s <user@host> [password] [-p port] [-i keyfile] [--raw]\n" +
+	"- Connect via SSH. Options:\n" +
+	"  -p <port>     : specify port (default 22)\n" +
+	"  -i <keyfile>  : use private key authentication\n" +
+	"  --raw         : enable raw mode (interactive shell, line-by-line reading)\n" +
+	"Examples:\n" +
+	"  %s user@host password\n" +
+	"  %s user@host -i /path/to/keyfile --raw\n" +
+	"  %s user@host password -p 2222 --raw"
 
 const errorText = "***: command not valid, try > *** help"
 
