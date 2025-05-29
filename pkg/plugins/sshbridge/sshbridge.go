@@ -48,6 +48,7 @@ type mqtt2sshConnection struct {
 	session         *ssh.Session
 	stdinPipe       io.WriteCloser
 	stdoutPipe      io.Reader
+	stderrPipe      io.Reader
 	outputChan      chan string
 	mqttClientID    string
 	sshHost         string
@@ -349,38 +350,29 @@ func (s *SSHBridge) startInteractiveSession(conn *mqtt2sshConnection) error {
 	if err != nil {
 		return err
 	}
-	stderr, err := session.StderrPipe()
-	if err != nil {
-		return err
-	}
+
 	conn.session = session
 	conn.stdinPipe = stdin
 	conn.stdoutPipe = stdout
-	conn.outputChan = make(chan string, 2000)
 
-	// Avvia la lettura da stdout con stop gestito da context
-	s.StartStdoutReader(conn, conn.stdoutPipe)
-
-	// Lettura riga per riga da stderr (non stoppabile qui)
-	go func() {
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			line := scanner.Text()
-			s.post(line+"\r\n", conn.mqttClientID, "")
+	s.StartStdoutReader(conn)
+	if !conn.rawmode {
+		err = conn.session.Shell()
+		if err != nil {
+			return err
 		}
-		if err := scanner.Err(); err != nil {
-			conn.outputChan <- fmt.Sprintf("stderr error: %v", err)
-		}
-	}()
+	}
 
 	return nil
 }
 
-func (s *SSHBridge) StartStdoutReader(conn *mqtt2sshConnection, stdout io.Reader) {
+func (s *SSHBridge) StartStdoutReader(conn *mqtt2sshConnection) {
 	ctx, cancel := context.WithCancel(context.Background())
 	conn.stdoutCancel = cancel
+
+	// Lettura stdout
 	go func() {
-		scanner := bufio.NewScanner(stdout)
+		scanner := bufio.NewScanner(conn.stdoutPipe)
 		for {
 			select {
 			case <-ctx.Done():
@@ -404,6 +396,31 @@ func (s *SSHBridge) StartStdoutReader(conn *mqtt2sshConnection, stdout io.Reader
 		}
 		if err := scanner.Err(); err != nil {
 			s.post(fmt.Sprintf("stdout error: %v", err), conn.mqttClientID, "")
+		}
+	}()
+
+	// Lettura stderr
+	go func() {
+		stderr, err := conn.session.StderrPipe()
+		if err != nil {
+			s.post(fmt.Sprintf("stderr pipe error: %v", err), conn.mqttClientID, "")
+			return
+		}
+		scanner := bufio.NewScanner(stderr)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				if !scanner.Scan() {
+					break
+				}
+				line := scanner.Text()
+				s.post(line+"\r\n", conn.mqttClientID, "")
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			s.post(fmt.Sprintf("stderr error: %v", err), conn.mqttClientID, "")
 		}
 	}()
 }
