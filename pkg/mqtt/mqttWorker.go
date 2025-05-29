@@ -164,5 +164,9 @@ func (m *Worker) onBrokerDisconnect(client MQTT.Client, err error) {
 }
 
 func (m *Worker) Publish(topic string, payload interface{}) {
-	m.client.Publish(topic, mqttQOS, false, payload)
+	if m.client != nil && payload != nil {
+		m.client.Publish(topic, mqttQOS, false, payload)
+	} else {
+		log.Warnf("Publish fallita: client MQTT nullo o payload nullo (topic: %s)", topic)
+	}
 }

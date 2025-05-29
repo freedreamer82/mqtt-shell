@@ -105,7 +105,7 @@ func (s *MainScreen) Write(p []byte) (n int, err error) {
 
 	s.inputText = text
 
-	fyne.Do(func() {
+	fyne.DoAndWait(func() {
 		s.shell.SetText(text)
 		s.scroll.ScrollToBottom()
 	})
