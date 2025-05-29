@@ -3,8 +3,6 @@
 # Supports multiple OS, architectures, GUI modes and output directories
 
 # Default values
-DEFAULT_OS="linux"
-DEFAULT_ARCH="amd64"
 DEFAULT_MODE="hybrid"  # hybrid (mqtt-shell), gui-only, cli-only
 DEFAULT_OUTPUT_DIR="./dist"
 DEFAULT_USE_FYNE_CROSS=false
@@ -29,8 +27,8 @@ show_help() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "OPTIONS:"
-    echo "  -o, --os OS           Target operating system (default: linux)"
-    echo "  -a, --arch ARCH       Target architecture (default: amd64)"
+    echo "  -o, --os OS           Target operating system (default: auto-detect)"
+    echo "  -a, --arch ARCH       Target architecture (default: auto-detect)"
     echo "  -m, --mode MODE       Compilation mode (default: hybrid)"
     echo "  -d, --output-dir DIR  Output directory (default: ./dist)"
     echo "  -f, --fyne-cross      Use fyne-cross for GUI applications"
@@ -40,6 +38,8 @@ show_help() {
     echo "  -h, --help            Show this help message"
     echo "  --android             Shortcut: Build GUI for Android (all archs, fyne-cross)"
     echo "  --ios                 Shortcut: Build GUI for iOS (all archs, fyne-cross)"
+    echo ""
+    echo "If --os or --arch are not specified, they are automatically detected from the current machine."
     echo ""
     echo "OPERATING SYSTEMS:"
     echo "  linux, windows, darwin, android, ios"
@@ -53,7 +53,7 @@ show_help() {
     echo "  cli-only  - Command line only (mqtt-shell-no-gui)"
     echo ""
     echo "EXAMPLES:"
-    echo "  $0                                    # Build hybrid app for Linux amd64"
+    echo "  $0                                    # Build hybrid app for current OS/arch"
     echo "  $0 -o windows -a amd64 -m gui-only    # Build GUI-only for Windows 64-bit"
     echo "  $0 -o linux -a arm64 -m cli-only      # Build CLI-only for Linux ARM64"
     echo "  $0 --android                          # Build GUI for Android (all archs, fyne-cross)"
@@ -299,8 +299,8 @@ build_application() {
 
 # Parse command line arguments
 parse_args() {
-    local os=$DEFAULT_OS
-    local arch=$DEFAULT_ARCH
+    local os=$(go env GOOS)
+    local arch=$(go env GOARCH)
     local mode=$DEFAULT_MODE
     local output_dir=$DEFAULT_OUTPUT_DIR
     local use_fyne_cross=$DEFAULT_USE_FYNE_CROSS
@@ -409,7 +409,7 @@ check_gui_dependencies() {
         if command -v dpkg &> /dev/null; then
             # Debian/Ubuntu
             for lib in "${required_libs[@]}"; do
-                if ! dpkg -l | grep -q "^ii  $lib "; then
+                if ! dpkg -s "$lib" &> /dev/null; then
                     missing_libs+=("$lib")
                 fi
             done
@@ -462,9 +462,16 @@ main() {
     
     # Parse arguments and execute
     if [ $# -eq 0 ]; then
-        print_info "No arguments provided, using defaults"
-        check_gui_dependencies "$DEFAULT_OS" "$DEFAULT_MODE"
-        build_application "$DEFAULT_OS" "$DEFAULT_ARCH" "$DEFAULT_MODE" "$DEFAULT_OUTPUT_DIR" "$DEFAULT_USE_FYNE_CROSS"
+        print_info "No arguments provided, inferring OS and architecture from current machine"
+        local current_os=$(go env GOOS)
+        local current_arch=$(go env GOARCH)
+        print_info "Detected OS: $current_os"
+        print_info "Detected Architecture: $current_arch"
+        print_info "Using default mode: $DEFAULT_MODE"
+        print_info "Using default output directory: $DEFAULT_OUTPUT_DIR"
+        print_info "Using fyne-cross: $DEFAULT_USE_FYNE_CROSS"
+        check_gui_dependencies "$current_os" "$DEFAULT_MODE"
+        build_application "$current_os" "$current_arch" "$DEFAULT_MODE" "$DEFAULT_OUTPUT_DIR" "$DEFAULT_USE_FYNE_CROSS"
     else
         parse_args "$@"
     fi
