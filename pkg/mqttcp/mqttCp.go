@@ -145,11 +145,14 @@ func (m *MqttCp) Stop() {
 	m.worker.StopMQTT()
 }
 
-func (m *MqttCp) mftReceiveFile(f *os.File, inboundChan chan []byte) error {
+func (m *MqttCp) mftReceiveFile(f *os.File, inboundChan chan []byte, progress *chan mft.MftProgress) error {
 	writer := bufio.NewWriter(f)
 	ready := false
 	lastFrameTs := time.Now()
 	var frameRef uint16 = 0
+	var framesLeft uint16 = 0
+	var frameTotal uint32 = 0
+	var frameReceived uint32 = 0
 	timeoutMftTransfer := mft.MFT_FRAME_TIMEOUT()
 	ticker := time.NewTicker(timeoutMftTransfer)
 	for {
@@ -165,37 +168,67 @@ func (m *MqttCp) mftReceiveFile(f *os.File, inboundChan chan []byte) error {
 			case mft.MftFrameType_START:
 				ready = true
 				frameRef = frame.GetFrameNo()
-			case mft.MftFrameType_TRANSMISSION, mft.MftFrameType_END:
+				framesLeft = frameRef
+				frameTotal = uint32(frameRef)
+				frameReceived = 0
+				if progress != nil {
+					*progress <- mft.MftProgress{
+						FrameTotal:    frameTotal,
+						FrameReceived: frameReceived,
+						Percent:       0,
+					}
+				}
+			case mft.MftFrameType_TRANSMISSION:
 				if ready {
-					frameRef++
-					if frameRef == frame.GetFrameNo() {
-						if fType == mft.MftFrameType_TRANSMISSION {
-							_, errW := writer.Write(frame.GetPayload())
-							if errW != nil {
-								return errW
-							}
-						} else {
-							writer.Flush()
-							return nil
-						}
-					} else {
+					frameNo := frame.GetFrameNo()
+					if frameNo != framesLeft {
 						return errors.New("wrong frame order")
 					}
+					framesLeft--
+					frameReceived++
+					_, errW := writer.Write(frame.GetPayload())
+					if errW != nil {
+						return errW
+					}
+					if progress != nil && frameTotal > 0 {
+						*progress <- mft.MftProgress{
+							FrameTotal:    frameTotal,
+							FrameReceived: frameReceived,
+							Percent:       float32(frameReceived) / float32(frameTotal) * 100,
+						}
+					}
+				} else {
+					return errors.New("missing start frame")
+				}
+			case mft.MftFrameType_END:
+				if ready {
+					if frame.GetFrameNo() != 0 {
+						return errors.New("frame END con numero diverso da 0")
+					}
+					writer.Flush()
+					if progress != nil && frameTotal > 0 {
+						*progress <- mft.MftProgress{
+							FrameTotal:    frameTotal,
+							FrameReceived: frameTotal,
+							Percent:       100,
+						}
+					}
+					return nil
 				} else {
 					return errors.New("missing start frame")
 				}
 			}
 		case <-ticker.C:
-			if time.Now().Sub(lastFrameTs) > timeoutMftTransfer {
+			if time.Since(lastFrameTs) > timeoutMftTransfer {
 				return errors.New("timeout on reception")
 			}
 		}
 	}
 }
 
-func (m *MqttCp) receiveFileAndCheck(f *os.File, inChan chan []byte, md5Expected string, sizeExpected int64) error {
+func (m *MqttCp) receiveFileAndCheck(f *os.File, inChan chan []byte, md5Expected string, sizeExpected int64, progress *chan mft.MftProgress) error {
 	fName := f.Name()
-	errReception := m.mftReceiveFile(f, inChan)
+	errReception := m.mftReceiveFile(f, inChan, progress)
 	f.Close()
 	if errReception != nil {
 		return errReception
@@ -212,32 +245,55 @@ func (m *MqttCp) receiveFileAndCheck(f *os.File, inChan chan []byte, md5Expected
 	return os.Rename(fName, realName)
 }
 
-func (m *MqttCp) mftTransmitFile(fileName, transmissionTopic string) error {
+func (m *MqttCp) mftTransmitFile(fileName, transmissionTopic string, progress *chan mft.MftProgress) error {
 	f, errOpen := os.Open(fileName)
 	if errOpen != nil {
 		return errOpen
 	}
 	defer f.Close()
-	var counter uint16 = 0
-	reader := bufio.NewReader(f)
+
+	fileInfo, errStat := f.Stat()
+	if errStat != nil {
+		return errStat
+	}
+	fileSize := fileInfo.Size()
 	mftSize := mft.MFT_PAYLOAD_SIZE()
+	numFrames := int((fileSize + int64(mftSize) - 1) / int64(mftSize)) // round up
+
 	buf := make([]byte, mftSize)
-	m.mftTransmitStart(counter, transmissionTopic)
-	for {
-		counter++
-		n, err := reader.Read(buf)
-		if err != nil {
-			if err != io.EOF {
-				return err
-			}
-			m.mftTransmitEnd(counter, transmissionTopic)
-			break
+
+	// Invia il frame di start con il numero totale di frame
+	m.mftTransmitStart(uint16(numFrames), transmissionTopic)
+
+	for frameIdx := 0; frameIdx < numFrames; frameIdx++ {
+		offset := int64(frameIdx) * int64(mftSize)
+		_, errSeek := f.Seek(offset, io.SeekStart)
+		if errSeek != nil {
+			return errSeek
 		}
-		errT := m.mftTransmit(buf[:n], counter, transmissionTopic)
+		n, err := f.Read(buf)
+		if err != nil && err != io.EOF {
+			return err
+		}
+
+		frameNo := uint16(numFrames - frameIdx)
+		errT := m.mftTransmit(buf[:n], frameNo, transmissionTopic)
 		if errT != nil {
 			return errT
 		}
+
+		if progress != nil {
+			*progress <- mft.MftProgress{
+				FrameTotal:    uint32(numFrames),
+				FrameReceived: uint32(frameIdx + 1),
+				Percent:       float32(frameIdx+1) / float32(numFrames) * 100,
+			}
+		}
+
 		time.Sleep(mft.MFT_FRAME_DELAY())
 	}
+
+	// Invia il frame di end
+	m.mftTransmitEnd(0, transmissionTopic)
 	return nil
 }

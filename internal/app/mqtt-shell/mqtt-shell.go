@@ -9,6 +9,7 @@ import (
 	"github.com/freedreamer82/mqtt-shell/pkg/info"
 	"github.com/freedreamer82/mqtt-shell/pkg/mqttchat"
 	"github.com/freedreamer82/mqtt-shell/pkg/mqttcp"
+	"github.com/freedreamer82/mqtt-shell/pkg/mqttcp/mft"
 	"github.com/freedreamer82/mqtt-shell/pkg/plugins/sshbridge"
 	"github.com/freedreamer82/mqtt-shell/pkg/plugins/telnetbridge"
 	log "github.com/sirupsen/logrus"
@@ -62,14 +63,31 @@ func RunBeacon(mqttOpts *MQTT.ClientOptions, conf *config.Config) {
 	discovery.Run(nil)
 }
 
+func printProgress(progressChan chan mft.MftProgress, mqttCpClient *mqttcp.MqttClientCp) {
+	var lastProgress mft.MftProgress
+	for p := range progressChan {
+		lastProgress = p
+		mqttCpClient.Printf("\rProgress: %d/%d frames (%.2f%%)", p.FrameReceived, p.FrameTotal, p.Percent)
+	}
+	mqttCpClient.Printf("\rProgress: %d/%d frames (%.2f%%)\nTransfer complete.\n", lastProgress.FrameReceived, lastProgress.FrameTotal, lastProgress.Percent)
+}
+
 func RunCopyLocalToRemote(mqttOpts *MQTT.ClientOptions, conf *config.Config) {
 	mqttCpClient := mqttcp.NewMqttClientCp(mqttOpts, conf.Cp.Server2LocalTopic, conf.Cp.Local2ServerTopic)
-	mqttCpClient.CopyLocalToRemote(conf.Copy.Local2Remote.Source, conf.Copy.Local2Remote.Destination)
+	progressChan := make(chan mft.MftProgress, 200)
+
+	go printProgress(progressChan, mqttCpClient)
+
+	mqttCpClient.CopyLocalToRemote(conf.Copy.Local2Remote.Source, conf.Copy.Local2Remote.Destination, &progressChan)
 }
 
 func RunCopyRemoteToLocal(mqttOpts *MQTT.ClientOptions, conf *config.Config) {
 	mqttCpClient := mqttcp.NewMqttClientCp(mqttOpts, conf.Cp.Server2LocalTopic, conf.Cp.Local2ServerTopic)
-	mqttCpClient.CopyRemoteToLocal(conf.Copy.Remote2Local.Source, conf.Copy.Remote2Local.Destination)
+	progressChan := make(chan mft.MftProgress, 200)
+
+	go printProgress(progressChan, mqttCpClient)
+
+	mqttCpClient.CopyRemoteToLocal(conf.Copy.Remote2Local.Source, conf.Copy.Remote2Local.Destination, &progressChan)
 }
 
 func BuildMqttOpts(conf *config.Config) (*MQTT.ClientOptions, error) {

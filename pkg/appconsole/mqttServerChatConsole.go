@@ -60,6 +60,6 @@ func NewMqttServerChatConsole(mqttChat *chat.MqttServerChat, host string, port i
 
 // Start starts the interactive console.
 func (c *MqttServerChatConsole) Start() {
-	log.Printf("MQTT console started on port %s. Type 'help' for a list of commands.\n", c.port)
+	log.Printf("MQTT console started on port %d. Type 'help' for a list of commands.\n", c.port)
 	c.console.Start(c.host, c.port, c.maxConnection)
 }

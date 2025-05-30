@@ -170,7 +170,7 @@ func (s *MqttServerCp) runServerToClientTransfer(msg *MqttJsonCp, conn ClientCpC
 		return
 	}
 
-	errTrans := s.mftTransmitFile(msg.Request.ServerPath, msg.Topic)
+	errTrans := s.mftTransmitFile(msg.Request.ServerPath, msg.Topic, nil)
 	if errTrans != nil {
 		log.Errorf("error in data transfer: %s", errTrans.Error())
 	} else {
@@ -241,7 +241,7 @@ func (s *MqttServerCp) runClientToServerTransfer(msg *MqttJsonCp, conn ClientCpC
 
 func (s *MqttServerCp) handleFileTransferClient2Server(f *os.File, inChan chan []byte, md5Expected string, sizeExpected int64) error {
 	fName := f.Name()
-	errReception := s.mftReceiveFile(f, inChan)
+	errReception := s.mftReceiveFile(f, inChan, nil)
 	f.Close()
 	if errReception != nil {
 		return errReception

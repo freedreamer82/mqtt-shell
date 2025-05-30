@@ -25,6 +25,7 @@ require (
 	github.com/freedreamer82/go-console v1.0.1
 	github.com/helloyi/go-sshclient v1.2.0
 	github.com/olekukonko/tablewriter v1.0.4
+	golang.org/x/crypto v0.38.0
 
 )
 
@@ -78,7 +79,6 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/yuin/goldmark v1.7.11 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.38.0 // indirect
 	golang.org/x/image v0.27.0 // indirect
 	golang.org/x/net v0.40.0 // indirect
 	golang.org/x/sync v0.14.0 // indirect

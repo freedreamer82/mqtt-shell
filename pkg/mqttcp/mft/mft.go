@@ -38,6 +38,12 @@ type MftFrame struct {
 	footer MftFooter
 }
 
+type MftProgress struct {
+	FrameTotal    uint32
+	FrameReceived uint32
+	Percent       float32
+}
+
 type MftHeader struct {
 	top       [8]byte
 	frameType MftFrameType

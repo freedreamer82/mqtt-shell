@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	MQTT "github.com/eclipse/paho.mqtt.golang"
+	"github.com/freedreamer82/mqtt-shell/pkg/mqttcp/mft"
 	"github.com/lithammer/shortuuid/v3"
 	"io"
 	"os"
@@ -41,36 +42,36 @@ func (c *MqttClientCp) startUpClient() bool {
 	}
 
 	if !c.worker.GetMqttClient().IsConnected() {
-		c.print("mqtt connection fail")
+		c.Print("mqtt connection fail")
 		return false
 	}
 	return true
 }
 
-func (c *MqttClientCp) CopyRemoteToLocal(remoteFile string, localPath string) {
+func (c *MqttClientCp) CopyRemoteToLocal(remoteFile string, localPath string, progress *chan mft.MftProgress) {
 	connection := c.startUpClient()
 	if !connection {
 		return
 	}
 
 	if !path.IsAbs(remoteFile) {
-		c.print("remote path must be absolute")
+		c.Print("remote path must be absolute")
 		return
 	}
 
 	newLocalPath, errCheck := fileDestinationPathCheck(localPath, remoteFile)
 	if errCheck != nil {
-		c.print(errCheck.Error())
+		c.Print(errCheck.Error())
 		return
 	}
 
 	startMsg, errHandShake := c.remote2LocalHandshakeProcedure(newLocalPath, remoteFile)
 	if errHandShake != nil {
-		c.printf("error in handshake: %s", errHandShake.Error())
+		c.Printf("error in handshake: %s", errHandShake.Error())
 		return
 	} else {
-		c.print("handshake success, start transmission")
-		c.println()
+		c.Print("handshake success, start transmission")
+		c.Println()
 	}
 
 	inChan := make(chan []byte, 10000)
@@ -82,7 +83,7 @@ func (c *MqttClientCp) CopyRemoteToLocal(remoteFile string, localPath string) {
 
 	errSub := c.worker.Subscribe(startMsg.Topic, onMftFrame)
 	if errSub != nil {
-		c.printf("error in subscribe %s", errSub.Error())
+		c.Printf("error in subscribe %s", errSub.Error())
 		return
 	}
 	defer c.worker.Unsubscribe(startMsg.Topic)
@@ -90,71 +91,71 @@ func (c *MqttClientCp) CopyRemoteToLocal(remoteFile string, localPath string) {
 	tmpName := fmt.Sprintf("%s.tmp", newLocalPath)
 	f, errCreation := os.Create(tmpName)
 	if errCreation != nil {
-		c.printf("error in subscribe %s", errCreation.Error())
+		c.Printf("error in subscribe %s", errCreation.Error())
 		os.Remove(tmpName)
 		return
 	}
 
 	errTrans := c.Transmit(*startMsg)
 	if errTrans != nil {
-		c.printf("error in start msg %s", errTrans.Error())
+		c.Printf("error in start msg %s", errTrans.Error())
 		os.Remove(tmpName)
 		return
 	}
 
-	errReceive := c.receiveFileAndCheck(f, inChan, startMsg.Request.MD5, startMsg.Request.Size)
+	errReceive := c.receiveFileAndCheck(f, inChan, startMsg.Request.MD5, startMsg.Request.Size, progress)
 	if errReceive != nil {
-		c.print(errReceive.Error())
+		c.Print(errReceive.Error())
 		os.Remove(tmpName)
 		return
 	}
-	c.printf("file received with sucess: %s", newLocalPath)
-	c.println()
+	c.Printf("\nfile received with success: %s", newLocalPath)
+	c.Println()
 
 }
 
-func (c *MqttClientCp) CopyLocalToRemote(localFile string, remotePath string) {
+func (c *MqttClientCp) CopyLocalToRemote(localFile string, remotePath string, progress *chan mft.MftProgress) {
 	connection := c.startUpClient()
 	if !connection {
 		return
 	}
 
 	if !path.IsAbs(remotePath) {
-		c.print("remote path must be absolute")
+		c.Print("remote path must be absolute")
 		return
 	}
 
 	size, md5Value, err := takeFileInfo(localFile)
 	if err != nil {
-		c.printf(err.Error())
+		c.Printf(err.Error())
 		return
 	}
 
 	uuid, transmissionTopic, errHandShake := c.local2RemoteHandshakeProcedure(localFile, remotePath, size, md5Value)
 	if errHandShake != nil {
-		c.printf("error in handshake: %s", errHandShake.Error())
+		c.Printf("error in handshake: %s", errHandShake.Error())
 		return
 	} else {
-		c.print("handshake success, start transmission")
-		c.println()
+		c.Print("handshake success, start transmission")
+		c.Println()
 	}
 
-	errTrans := c.mftTransmitFile(localFile, transmissionTopic)
+	errTrans := c.mftTransmitFile(localFile, transmissionTopic, progress)
 	if errTrans != nil {
-		c.printf("error in data transfer: %s", errTrans.Error())
+		c.Printf("error in data transfer: %s", errTrans.Error())
 		return
 	} else {
-		c.printf("%d bytes sent", size)
-		c.println()
+		c.Printf("%d bytes sent", size)
+		c.Println()
 	}
 
 	str, errV := c.verifyTransmission(uuid)
 	if errV != nil {
-		c.printf("error in data receiving: %s", errV.Error())
+		c.Printf("error in data receiving: %s", errV.Error())
 		return
 	} else {
-		c.printf("success: %s", str)
-		c.println()
+		c.Printf("success: %s", str)
+		c.Println()
 	}
 
 }
@@ -269,14 +270,14 @@ func (c *MqttClientCp) awaitResponse(msgUUID string, step MqttCpStep, timeout ti
 	}
 }
 
-func (c *MqttClientCp) print(a ...interface{}) (n int, err error) {
+func (c *MqttClientCp) Print(a ...interface{}) (n int, err error) {
 	return fmt.Fprint(c.writer, a...)
 }
 
-func (c *MqttClientCp) println() (n int, err error) {
+func (c *MqttClientCp) Println() (n int, err error) {
 	return fmt.Fprintln(c.writer)
 }
 
-func (c *MqttClientCp) printf(format string, a ...interface{}) (n int, err error) {
+func (c *MqttClientCp) Printf(format string, a ...interface{}) (n int, err error) {
 	return fmt.Fprintf(c.writer, format, a...)
 }
